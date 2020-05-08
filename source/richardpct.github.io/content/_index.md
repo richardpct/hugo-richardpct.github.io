@@ -10,19 +10,16 @@ title: Home
 
 Hello world !
 
-My name is Richard and I live in Paris, I am DevOps/SRE Engineer and I have
+My name is Richard and I live in Paris. I am a DevOps/SRE engineer and I have
 worked in many lines of business for some large French companies such as
-telecom, rail transport, banking...
+telecom, rail transport, banking, and so on.<br/>
+I have decided to create this website to share with you my experience with
+automation and infrastructure like code, containers, cloud computing,
+programming and much more.
 
-I have decided to create this website to share with you my experience about
-`automation`, `infrastructure as code`, `containers`, `cloud computing`,
-`programming` and much more.<br />
-The purpose of writing this blog is because I need to remember what I have
-done, there are so much knowledge to learn when you work as a DevOps/SRE
-Engineer. This blog is mainly about technical contents.
-
-I hope you enjoy my personnal website !
-
-<hr/>
+The purpose of this blog is to keep track of what I have accomplished so far
+and to push myself to learn more. This blog provides mainly technical contents.
+<br/>
+I hope you enjoy my personal website !
 
 ### Articles
