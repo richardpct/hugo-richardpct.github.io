@@ -8,7 +8,7 @@ title: Home
 
 ### My personal blog
 
-Hello world !
+Hello world!
 
 My name is Richard and I live in Paris. I am a DevOps/SRE engineer and I have
 worked in many lines of business for some large French companies such as
@@ -20,6 +20,6 @@ programming and much more.
 The purpose of this blog is to keep track of what I have accomplished so far
 and to push myself to learn more. This blog provides mainly technical contents.
 <br/>
-I hope you enjoy my personal website !
+I hope you enjoy my personal website!
 
 ### Articles

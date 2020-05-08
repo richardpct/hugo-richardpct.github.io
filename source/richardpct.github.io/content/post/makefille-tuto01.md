@@ -377,7 +377,7 @@ instead of:
 
     $ make libevent.a
 
-Now, let's try my Makefile to show you the power of Make !
+Now, let's try my Makefile to show you the power of Make!
 
 Retrieve the source then install all packages:
 
