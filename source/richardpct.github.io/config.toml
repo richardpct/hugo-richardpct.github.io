@@ -1,0 +1,36 @@
+baseurl = "/"
+languageCode = "en-us"
+title = "home"
+theme = "hugo-classic"
+googleAnalytics = ""
+ignoreFiles = ["\\.Rmd$", "_files$", "_cache$"]
+enableEmoji = true
+footnotereturnlinkcontents = "↩"
+
+[permalinks]
+    post = "/post/:year/:month/:day/:slug/"
+
+#[[menu.main]]
+#    name = "Categories"
+#    url = "/categories/"
+#    weight = 1
+[[menu.main]]
+    name = "github"
+    url = "https://github.com/richardpct"
+    weight = 2
+[[menu.main]]
+    name = "linkedin"
+    url = "https://www.linkedin.com/in/richard-phan-chan-the/"
+    weight = 2
+#[[menu.main]]
+#    name = "Tags"
+#    url = "/tags/"
+#    weight = 2
+#[[menu.feed]]
+#    name = "Subscribe"
+#    url = "/index.xml"
+
+[params]
+    description = "My personal blog."
+    footer = "© 2020 · Powered by the [Classic theme](https://github.com/goodroot/hugo-classic) for [Hugo](https://gohugo.io/)."
+    custom_css = ["css/theme-override.css"]
