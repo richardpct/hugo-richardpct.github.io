@@ -8,11 +8,11 @@ title: Home
 
 ### My personal blog
 
-Hello world!
+Hello, World!
 
 My name is Richard and I live in Paris. I am a DevOps/SRE engineer and I have
 worked in many lines of business for some large French companies such as
-telecom, rail transport, banking, and so on.<br/>
+Telecom, rail transport, banking, and so on.<br/>
 I have decided to create this website to share with you my experience with
 automation and infrastructure like code, containers, cloud computing,
 programming and much more.
