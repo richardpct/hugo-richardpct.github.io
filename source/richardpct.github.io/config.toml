@@ -32,5 +32,5 @@ footnotereturnlinkcontents = "↩"
 
 [params]
     description = "My personal blog."
-    footer = "© 2020 · Powered by the [Classic theme](https://github.com/goodroot/hugo-classic) for [Hugo](https://gohugo.io/)."
+    footer = "© 2021 · Powered by the [Classic theme](https://github.com/goodroot/hugo-classic) for [Hugo](https://gohugo.io/)."
     custom_css = ["css/theme-override.css"]
