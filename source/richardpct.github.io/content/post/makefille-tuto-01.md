@@ -16,8 +16,8 @@ it may be more efficient to use Makefile instead of Bash script.
 ## What is Make ?
 Make is a tool that helps to automate some tasks, but what is the benefit of
 using a Makefile against a shell script ?<br/>
-For instance you want to build a simple program in C and without to go into
-details you may follow these rules:
+For instance you might want to build a simple program in C and without to go
+into details you may follow these rules:
 
 * To compile a program you need the object file \*.o
 * But to build an object \*.o you need the source file \*.c
@@ -43,16 +43,15 @@ target_B: target_C
 	commands
 ```
 
-Whenever you run this program, it rebuilds the targets if necessary, that is
-the program is rebuilt only if program.o is altered, and program.o is rebuilt
-only if program.c is modified. But how Make knows if program must be rebuilt
-when program.c is modified ? By default Make compares the timestamp of each
-targets and their prerequisites, if a target is older than their prerequisites,
-the target will be rebuilt.
+Whenever you run this Makefile, the program will be rebuilt only if program.o
+is altered, and program.o will be rebuilt only if program.c is modified. But
+how Make knows if program must be rebuilt when program.c is modified ? By
+default Make compares the timestamp of each targets and their prerequisites, if
+a target is older than their prerequisites, the target will be rebuilt.
 
 ## Make by example
-I wrote a Bash script to manage the installation of external packages which are
-not present by default on my MacOS system such as Tmux.
+I wrote a Bash script for installing some programs which are not installed on
+my MacOS system such as Tmux.
 
 ### Bash script version
 The following script can be found
@@ -86,8 +85,8 @@ then it will rebuild all packages because this Bash script doesn't handle
 dependencies between the packages.
 
 ### Make script version
-Here is the Make script version and it can be found
-[here](https://github.com/richardpct/macos-packages/blob/master/Makefile):
+Here is the Makefile script version which is better than the Bash script and it
+can be found [here](https://github.com/richardpct/macos-packages/blob/master/Makefile):
 
 ```makefile
 .DEFAULT_GOAL := help
@@ -174,8 +173,8 @@ autoconf: autoconf.go ## Build autoconf
 	$(call install-package,$@)
 ```
 
-You may notice that this Makefile is longer than the Bash script, that's
-because it handles more features such as dependencies and checking.<br/>
+You may notice this Makefile is longer than the Bash script, because it handles
+more features such as dependencies and checking.<br/>
 Some packages have no prerequisites and can be built by itself such as tree,
 make and htop.
 
@@ -186,19 +185,18 @@ htop: htop.go ## Build htop
 	$(call install-package,$@)
 ```
 
-htop is the target that represents the resulting program built from the source
-file htop.go, htop requires the source file htop.go to be built. If the htop
-binary does not exist then the rules is excecuted, otherwise it is executed
-only if the htop binary is older than the source code htop.go.
+htop is the target representing the program we want to build from the source
+file htop.go. Whether the htop binary does not exist or it is older than the
+source code htop.go then the rules is executed.
 
-The htop binary is located in the path provided by the DEST_DIR variable (by
-default in $(HOME)/test/bin), the source files are retrieved from Github then
-are copied in the path provided by the GOPATH environment variable, that is in
-$(HOME)/go/src/$(REPO) by default. If these two paths are not located in the
-same directory as the Makefile, how Make looks for the htop and htop.go files
-in the right directory ? If it does not find htop and htop.go in the current
-directory then it looks for them in the directories defined by the VPATH
-variable, it is similar to the PATH variable in Bash shell.
+The htop binary will be installed in the path provided by the DEST_DIR variable
+(by default in $(HOME)/test/bin), the source files are retrieved from Github
+then are copied in the path provided by the GOPATH environment variable, that
+is in $(HOME)/go/src/$(REPO) by default. If these two paths are not located in
+the same directory as the Makefile, how Make looks for the htop and htop.go
+files in the right directory ? If it does not find htop and htop.go in the
+current directory then it looks for them in the directories defined by the
+VPATH variable, it is similar to the PATH variable in Bash shell.
 
 Here is the excerpt that illustrates the definition of VPATH:
 
