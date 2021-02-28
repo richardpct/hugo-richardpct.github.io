@@ -1,7 +1,7 @@
 ---
 title: "Makefile: Quick Start"
 date: 2019-08-07T15:20:47Z
-draft: false
+draft: true
 ---
 
 <img src="https://raw.githubusercontent.com/richardpct/images/master/windmill01.png" style="max-width:20%;min-width:40px;float:right;" alt="windmill" />
