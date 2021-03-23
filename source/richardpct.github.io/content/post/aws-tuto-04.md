@@ -1,7 +1,7 @@
 ---
 title: "AWS with Terraform tutorial 04"
 date: 2021-03-16T20:24:25Z
-draft: true
+draft: false
 ---
 
 ## Purpose
