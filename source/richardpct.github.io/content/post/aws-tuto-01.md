@@ -20,7 +20,7 @@ You will learn how to create:
 * A Internet Gateway
 * A Elastic IP
 * A route table
-* Some security groups to define firewall rules
+* Some security groups to define the firewall rules
 * A SSH key for connecting to the EC2
 
 The following figure shows you an overview of what you will build:
@@ -43,11 +43,11 @@ permissions to avoid using the root account
 * You must add your AWS credential on your local machine, for example by using
 ~/.aws/config and ~/.aws/credentials files so that Terraform is able to make
 requests to the AWS API
-* You must install the latest Terraform version (0.14.x)
+* You must install the latest Terraform version
 
 ## Create a S3 bucket
 
-Terraform must store the state of our current infrastructure somewhere, you
+Terraform need to track the state of our current infrastructure somewhere, you
 could store the state on your local machine but in this case you are the only
 one who can access it. By using a S3 bucket for storing your Terraform state,
 your coworkers can also to access it.<br />
@@ -101,9 +101,9 @@ variable "bucket" {
 }
 ```
 
-I could set the variables now by using `default` attribute, but I prefer use
-environment variables in order not to include them on my Github repository
-because datas such as bucket name or SSH keys are sensible.
+I could have set the variables by using the `default` attribute, but I prefer
+use the environment variables in order not to include them on my Github
+repository because some datas such as bucket name or SSH keys are sensible.
 
 #### 00-bucket/versions.tf
 
@@ -126,11 +126,12 @@ You shoud have 3 files in your working directory:
 │   └── versions.tf
 ```
 
-You must initialize your working directory in order to retrieve the AWS plugins:
+You must initialize your working directory in order to retrieve the Terraform
+plugins for AWS:
 
     $ terraform init
 
-You have now a new .terraform directory created:
+You have now a new .terraform directory that is just created:
 
 ```
 ├── 00-bucket
@@ -143,8 +144,8 @@ You have now a new .terraform directory created:
 #### Deployment
 
 In the `vars.tf` file we have declared 2 variables: `region` and `bucket`.<br />
-Export the following environment variables in order to assign values to the
-variables:
+Export the following environment variables in order to assign the values to the
+variables `region` and `bucket`:
 
     $ export TF_VAR_region="eu-west-3"
     $ export TF_VAR_bucket="mybucket-terraform-state"
@@ -156,8 +157,8 @@ Let's create our S3 bucket:
 
     $ terraform apply
 
-It will creates a `terraform.tfstate` file containing the state of our
-infrastructure, you should never delete it!
+It will create a `terraform.tfstate` file containing the state of our bucket,
+you should never delete it!
 
 ```
 ├── 00-bucket
@@ -167,10 +168,9 @@ infrastructure, you should never delete it!
 │   └── versions.tf
 ```
 
-Notice it is the only time that we store the Terraform state in our local
-machine in order to create the bucket.<br />
-From now on, we will store Terraform states of all our infrastructure stack in
-this bucket.
+Notice it is the only time that we store a Terraform state in our local
+machine, from now on, we will store the Terraform states of all our
+infrastructure in the bucket that we have just created.
 
 ## Create the network stack
 
@@ -321,7 +321,8 @@ You shoud have these files in your 01-network directory:
 │   └── versions.tf
 ```
 
-Export the following variables:
+Export the following variables in order to specify our region, bucket and the
+network key:
 
     $ export TF_VAR_region="eu-west-3"
     $ export TF_VAR_bucket="yourbucket-terraform-state"
@@ -350,8 +351,7 @@ Create a directory named `02-webserver` in your working directory.<br />
 
 #### 02-webserver/backends.tf
 
-I declare the remote backend which contains the datas that the network stack has
-exported to our S3 bucket:
+I declare a data object that retrieves the network information from our bucket:
 
 ```
 data "terraform_remote_state" "network" {
@@ -381,7 +381,7 @@ resource "aws_key_pair" "deployer" {
 }
 ```
 
-I declare a Security Group associated with our VPC for the WebServer:
+I create a Security Group for the WebServer:
 
 ```
 resource "aws_security_group" "webserver" {
@@ -394,9 +394,8 @@ resource "aws_security_group" "webserver" {
 }
 ```
 
-I specify a firewall rule that allows the world to connect to our server via
-SSH (in the real world we should only allow our own IP to connect to our
-instance):
+I create a firewall rule that allows anyone to connect to our server via SSH
+(in the real world we should only allow our own IP to connect to our instance):
 
 ```
 resource "aws_security_group_rule" "inbound_ssh" {
@@ -409,7 +408,7 @@ resource "aws_security_group_rule" "inbound_ssh" {
 }
 ```
 
-The following rule allows the world to make HTTP requests to our server:
+The following rule allows anyone to make HTTP requests to our server:
 
 ```
 resource "aws_security_group_rule" "inbound_http" {
@@ -422,8 +421,8 @@ resource "aws_security_group_rule" "inbound_http" {
 }
 ```
 
-The following rule allows our server to reach Internet, for example to be
-able to update the Linux system:
+The following rule allows our server to reach Internet for being able to update
+the Linux system:
 
 ```
 resource "aws_security_group_rule" "outbound_all" {
@@ -503,7 +502,7 @@ variable "ssh_public_key" {
 
 #### 02-webserver/outputs.tf
 
-Display the Elastic IP associated to our server so that we can connect to it:
+Display the public IP of our server so that we can connect to it:
 
 ```
 output "public_ip" {
@@ -536,7 +535,7 @@ You should have these files in your working directory:
 │   └── versions.tf
 ```
 
-Export the required environment variable containing your public SSH key:
+Export the following environment variable containing your public SSH key:
 
     $ export TF_VAR_ssh_public_key="ssh-rsa XYZ..."
 
@@ -554,7 +553,7 @@ Then build the server:
 ## Install a Web Server with Nginx
 
 The previous command displays on the output the public IP address of our
-webserver, wait a few seconds then connect into it via SSH:
+webserver, wait for a while then connect to it via SSH:
 
     $ ssh ec2-user@xx.xx.xx.xx
     # sudo su -
@@ -576,12 +575,12 @@ You don't need to clean up our bucket because we will need it in the next
 tutorials for storing our Terraform states.<br />
 <br />
 You may be wondering why I have decided to split the Terraform code in 3
-sections as I could have written it in the same directory?<br />
+sections instead of writing it in the same directory?<br />
 In the case that you have written all your code in the same directory, if you
 want for example modify the type of your instance, you should destroy all your
-infrastructure then rebuild it. In the case when we split the stacks, we only
-destroy then rebuild the webserver stack, the network stack remains unchanged,
-hence we save more times.
+infrastructure then rebuild it. In the case of our Terraform code is splitted,
+we only destroy then rebuild the webserver stack, the network stack remains
+unchanged, hence we save more times.
 
 ## Summary
 
