@@ -47,24 +47,30 @@ requests to the AWS API
 
 ## Create a S3 bucket
 
-Terraform need to track the state of our current infrastructure somewhere, you
+Terraform needs to track the state of our current infrastructure somewhere, you
 could store the state on your local machine but in this case you are the only
 one who can access it. By using a S3 bucket for storing your Terraform state,
-your coworkers can also to access it.<br />
+your coworkers can also access it.<br />
 The first thing to do is to create a S3 bucket on AWS, you should never delete
 it because you will need it as long as you use AWS with Terraform.<br />
 
 You must create a working directory, let's say `~/terraform/tuto-01`, then
 create a file named `00-bucket/main.tf` containing:
 
-#### 00-bucket/main.tf
+#### 00-bucket/providers.tf
 
 ```
 // Setting a provider and a region
 provider "aws" {
   region = var.region
 }
+```
 
+We define the region to use.
+
+#### 00-bucket/main.tf
+
+```
 // Creating a S3 bucket
 resource "aws_s3_bucket" "terraform_state" {
   bucket = var.bucket
@@ -111,7 +117,7 @@ I enforce the usage to a specific version of Terraform:
 
 ```
 terraform {
-  required_version = ">= 0.14"
+  required_version = ">= 1.0.0"
 }
 ```
 
@@ -122,6 +128,7 @@ You shoud have 3 files in your working directory:
 ```
 ├── 00-bucket
 │   ├── main.tf
+│   ├── providers.tf
 │   ├── vars.tf
 │   └── versions.tf
 ```
@@ -137,6 +144,7 @@ You have now a new .terraform directory that is just created:
 ├── 00-bucket
 │   ├── .terraform/
 │   ├── main.tf
+│   ├── providers.tf
 │   ├── vars.tf
 │   └── versions.tf
 ```
@@ -163,6 +171,7 @@ you should never delete it!
 ```
 ├── 00-bucket
 │   ├── main.tf
+│   ├── providers.tf
 │   ├── terraform.tfstate
 │   ├── vars.tf
 │   └── versions.tf
@@ -172,7 +181,7 @@ Notice it is the only time that we store a Terraform state in our local
 machine, from now on, we will store the Terraform states of all our
 infrastructure in the bucket that we have just created.
 
-## Create the network stack
+## Create the network component
 
 Create a new repository, let's say `~/terraform/tuto-01/01-network`.
 
@@ -188,7 +197,7 @@ terraform {
 }
 ```
 
-#### 01-network/main.tf
+#### 01-network/providers.tf
 
 Select our AWS region:
 
@@ -197,6 +206,8 @@ provider "aws" {
   region = var.region
 }
 ```
+
+#### 01-network/main.tf
 
 Create our VPC:
 
@@ -317,6 +328,7 @@ You shoud have these files in your 01-network directory:
 │   ├── backends.tf
 │   ├── main.tf
 │   ├── outputs.tf
+│   ├── providers.tf
 │   ├── vars.tf
 │   └── versions.tf
 ```
@@ -342,7 +354,7 @@ Then build your network stack:
 
     $ terraform apply
 
-## Create the WebServer stack
+## Create the WebServer component
 
 For this section I will show only the relevant snippet, to see the complete
 code go to my [Github repository](https://github.com/richardpct/aws-terraform-tuto01).
@@ -518,6 +530,7 @@ You should have these files in your working directory:
 ```
 ├── 00-bucket
 │   ├── main.tf
+│   ├── providers.tf
 │   ├── terraform.tfstate
 │   ├── vars.tf
 │   └── versions.tf
@@ -525,12 +538,14 @@ You should have these files in your working directory:
 │   ├── backends.tf
 │   ├── main.tf
 │   ├── outputs.tf
+│   ├── providers.tf
 │   ├── vars.tf
 │   └── versions.tf
 ├── 02-webserver
 │   ├── backends.tf
 │   ├── main.tf
 │   ├── outputs.tf
+│   ├── providers.tf
 │   ├── vars.tf
 │   └── versions.tf
 ```
