@@ -1,30 +1,22 @@
 ---
 title: Home
+description: "The personal writings and expressions of Grayfox, otherwise known as you too and everyone else. It is a loving and silly place."
 ---
-
 <img
-  id="main-image"
-  src="/images/partywizard.gif"
-  alt="Kellen Face">
+  id="foxy"
+  src="/images/grayf0x.jpg"
+  alt="A foxy face">
 
-# Hugo Classic
+## Welcome, friend
 
-### For text focused goodness
+### :purple_heart: :earth_africa: :purple_heart:
 
-About twenty years ago Jobs and Wozniak, the founders of Apple, came up with the very strange idea of selling information processing machines for use in the home. But around the same time, Bill Gates and Paul Allen came up with an idea even stranger and more fantastical: **selling computer operating systems**.
+Born in [The Abyss](https://en.wikipedia.org/wiki/Edmonton), **Grayfox** - also known as Zerkle Snorp - has spent over two decades fiddling with things on the Internet. Today he does nothing, so stop asking.
 
-This was much weirder than the idea of Jobs and Wozniak.
+Their greatest joys are darkness and its quietudes.
 
-~~~ruby
-def word_up(value)
-  self.class.from_life(name, value, type)
-end
-
-def word_down(value)
-  self.class.from_death(name, value, type)
-end
-~~~
+<img src="/images/partywizard.gif">
 
 ---
 
-### Writings
+## Musings

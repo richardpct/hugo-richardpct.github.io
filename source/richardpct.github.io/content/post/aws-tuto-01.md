@@ -25,7 +25,9 @@ You will learn how to create:
 
 The following figure shows you an overview of what you will build:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-01/image01.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-01/image01.png">
+</div>
 
 The default route table contains:
 
@@ -380,7 +382,9 @@ data "terraform_remote_state" "network" {
 The following figure explains how some informations can be shared between 2
 distinct stacks using a S3 bucket:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-01/image02.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-01/image02.png">
+</div>
 
 #### 02-webserver/main.tf
 

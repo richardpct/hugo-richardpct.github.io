@@ -14,7 +14,9 @@ server is failing.
 
 The following figure depicts the infrastructure you will build:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-07/image01.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-07/image01.png">
+</div>
 
 The source code can be found [here](https://github.com/richardpct/aws-terraform-tuto07).
 

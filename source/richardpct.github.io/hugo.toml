@@ -1,0 +1,41 @@
+baseurl = "/"
+enableEmoji = true
+footnotereturnlinkcontents = "↩"
+googleAnalytics = ""
+ignoreFiles = ["\\.Rmd$", "_files$", "_cache$"]
+languageCode = "en-us"
+theme = "hugo-classic"
+title = "home"
+
+[markup.goldmark.renderer]
+unsafe = true
+
+[markup.highlight]
+anchorLineNos = false
+codeFences = true
+guessSyntax = false
+hl_Lines = ""
+lineAnchors = ""
+lineNoStart = 1
+lineNos = false
+lineNumbersInTable = true
+noClasses = true
+style = "monokai"
+tabWidth = 4
+
+[permalinks]
+post = "/post/:year/:month/:day/:slug/"
+
+[[menu.main]]
+name = "github"
+url = "https://github.com/richardpct"
+weight = 2
+[[menu.main]]
+name = "linkedin"
+url = "https://www.linkedin.com/in/richard-phan-chan-the/"
+weight = 2
+
+[params]
+custom_css = ["css/theme-override.css"]
+description = "My personal blog."
+footer = "© 2026 · Powered by the [Classic theme](https://github.com/goodroot/hugo-classic) for [Hugo](https://gohugo.io/)."

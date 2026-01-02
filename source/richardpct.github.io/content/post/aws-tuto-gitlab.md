@@ -6,16 +6,16 @@ draft: false
 
 ## Table of Contents
 1. [Purpose](#Purpose)
-2. [Configuring the network](#Configuring the network)
-3. [Creating the EFS](#Creating the EFS)
-4. [Configuring the firewall rules](#Configuring the firewall rules)
-5. [Building the bastion](#Building the bastion)
-6. [Building the databases](#Building the databases)
-7. [Building the Load Balancers](#Building the Load Balancers)
-8. [Building the Gitlab servers](#Building the Gitlab servers)
-9. [Building the Gitlab Runners](#Building the Gitlab Runners)
-10. [Deploying the Gitlab infrastructure](#Deploying the Gitlab infrastructure)
-11. [Destroying your infrastructure](#Destroying your infrastructure)
+2. [Configuring the network](#Configuring-the-network)
+3. [Creating the EFS](#Creating-the-EFS)
+4. [Configuring the firewall rules](#Configuring-the-firewall-rules)
+5. [Building the bastion](#Building-the-bastion)
+6. [Building the databases](#Building-the-databases)
+7. [Building the Load Balancers](#Building-the-Load-Balancers)
+8. [Building the Gitlab servers](#Building-the-Gitlab-servers)
+9. [Building the Gitlab Runners](#Building-the-Gitlab-Runners)
+10. [Deploying the Gitlab infrastructure](#Deploying-the-Gitlab-infrastructure)
+11. [Destroying your infrastructure](#Destroying-your-infrastructure)
 12. [Summary](#Summary)
 
 <a name="Purpose"></a>
@@ -26,7 +26,9 @@ Terraform, the source code can be found [here](https://github.com/richardpct/aws
 
 The following figure depicts the infrastructure that you will build:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-gitlab/image01.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-gitlab/image01.png">
+</div>
 
 Gitlab is one of the most used Git repository manager in Open Source, in
 addition you may use the CI/CD feature called `Runners`.<br />
@@ -36,7 +38,7 @@ except I don't use a separate Gitaly service for managing the Git repositories,
 instead of this I prefer use a shared NFS because I think it is a good
 trade-off between maintenance and cost.
 
-<a name="Configuring the network"></a>
+<a name="Configuring-the-network"></a>
 ## Configuring the network
 
 #### environments/dev/00-base/main.tf
@@ -288,7 +290,7 @@ resource "aws_eip" "bastion" {
 }
 ```
 
-<a name="Creating the EFS"></a>
+<a name="Creating-the-EFS"></a>
 ## Creating the EFS
 
 #### environments/dev/00-base/efs.tf
@@ -313,7 +315,7 @@ resource "aws_efs_mount_target" "mount_target_b" {
 }
 ```
 
-<a name="Configuring the firewall rules"></a>
+<a name="Configuring-the-firewall-rules"></a>
 ## Configuring the firewall rules
 
 #### modules/base/sg.tf
@@ -650,7 +652,7 @@ resource "aws_security_group_rule" "efs_inbound_gitlab" {
 }
 ```
 
-<a name="Building the bastion"></a>
+<a name="Building-the-bastion"></a>
 ## Building the bastion
 
 #### modules/bastion/main.tf
@@ -716,7 +718,7 @@ INSTANCE_ID="$(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
 aws --region eu-west-3 ec2 associate-address --instance-id $INSTANCE_ID --allocation-id ${eip_bastion_id}
 ```
 
-<a name="Building the databases"></a>
+<a name="Building-the-databases"></a>
 ## Building the databases
 
 #### modules/database/main.tf
@@ -763,7 +765,7 @@ resource "aws_db_instance" "postgres" {
 }
 ```
 
-<a name="Building the Load Balancers"></a>
+<a name="Building-the-Load-Balancers"></a>
 ## Building the Load Balancers
 
 #### modules/gitlab/alb.tf
@@ -844,7 +846,7 @@ resource "aws_lb_listener" "gitlab_internal" {
 }
 ```
 
-<a name="Building the Gitlab servers"></a>
+<a name="Building-the-Gitlab-servers"></a>
 ## Building the Gitlab servers
 
 #### modules/gitlab/main.tf
@@ -923,7 +925,7 @@ EOF
 gitlab-ctl reconfigure
 ```
 
-<a name="Building the Gitlab Runners"></a>
+<a name="Building-the-Gitlab-Runners"></a>
 ## Building the Gitlab Runners
 
 #### modules/runner/main.tf
@@ -987,7 +989,7 @@ gitlab-runner register \
   --description "docker-runner"
 ```
 
-<a name="Deploying the Gitlab infrastructure"></a>
+<a name="Deploying-the-Gitlab-infrastructure"></a>
 ## Deploying the Gitlab infrastructure
 
 Export the following environment variables:
@@ -1064,7 +1066,7 @@ following command:
     $ terraform apply -var="gitlab_nb_desired=2"
     $ terraform apply -var="runner_nb_desired=2"
 
-<a name="Destroying your infrastructure"></a>
+<a name="Destroying-your-infrastructure"></a>
 ## Destroying your infrastructure
 
 After finishing your test, destroy your infrastructure:

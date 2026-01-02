@@ -24,7 +24,9 @@ instead I use an EC2 instance where I install Redis.
 
 The following figure depicts the infrastructure you will build:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-04/image01.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-04/image01.png">
+</div>
 
 A public subnet is an area where it can reach Internet and Internet can reach
 it, whereas a private subnet is an area where it can reach Internet via a NAT

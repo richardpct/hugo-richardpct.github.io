@@ -27,7 +27,9 @@ instead I use an EC2 instance and I install Redis manually.
 
 The following figure depicts the infrastructure you will build:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-05/image01.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-05/image01.png">
+</div>
 
 The Terraform code can be found [here](https://github.com/richardpct/aws-terraform-tuto05).
 

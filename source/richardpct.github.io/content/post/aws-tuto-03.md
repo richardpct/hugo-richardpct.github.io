@@ -20,7 +20,9 @@ I take up the previous tutorial by adding some improvements:
 
 Here is an overview of the infrastructure you will build in this tutorial:
 
-<img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-03/image01.png">
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-03/image01.png">
+</div>
 
 The source code is available on my [Github repository](https://github.com/richardpct/aws-terraform-tuto03).
 

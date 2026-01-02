@@ -13,8 +13,14 @@
 </div>
 
 {{ if .Params.toc }}
-{{ .TableOfContents }}
+  {{ with .TableOfContents }}
+  <div id="table-of-contents">
+    <h2>Table of Contents</h2>
+    {{ . | safeHTML }}
+  </div>
+  {{ end }}
 {{ end }}
+
 <div class="content-wrapper">
   <main>
     {{ .Content }}
