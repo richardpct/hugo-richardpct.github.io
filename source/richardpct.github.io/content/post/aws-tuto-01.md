@@ -1,219 +1,230 @@
 ---
-title: "AWS with Terraform tutorial 01"
-date: 2021-02-20T15:11:25Z
-draft: false
+title: "Getting Started with AWS and OpenTofu"
+date: 2021-02-20
+toc: true
+tags:
+- aws
+- opentofu
+- terraform
+categories:
+- tutorial
 ---
 
 ## Purpose
 
-I will show you how to build a simple AWS example using Terraform for your
-first steps.<br />
-The example that I have chosen is [the Getting Started with IPv6 for Amazon VPC](https://docs.aws.amazon.com/vpc/latest/userguide/get-started-ipv6.html),
-you will able to create a EC2 instance in AWS which we will spin up a web service.
+I will show you how to build a simple AWS infrastructure using OpenTofu (an open-source Terraform alternative) for your first steps with Infrastructure as Code.
+
+The example I have chosen is based on [the Getting Started with IPv6 for Amazon VPC](https://docs.aws.amazon.com/vpc/latest/userguide/get-started-ipv6.html). By the end of this tutorial, you will have created an EC2 instance running a web server, fully deployed and managed through code.
+
+The full source code is available on my [GitHub repository](https://github.com/richardpct/aws-terraform-tuto01).
+
+## What you will build
 
 You will learn how to create:
 
-* A S3 bucket
-* A VPC
-* A public subnet
-* A EC2 using an Amazon Linux image
-* A Internet Gateway
-* A Elastic IP
-* A route table
-* Some security groups to define the firewall rules
-* A SSH key for connecting to the EC2
+* An S3 bucket for storing OpenTofu state
+* A VPC with a public subnet
+* An Internet Gateway and a route table
+* Security groups defining firewall rules (SSH and HTTP)
+* An EC2 instance using an Amazon Linux image
+* An Elastic IP for a stable public address
+* An SSH key pair for connecting to the instance
 
-The following figure shows you an overview of what you will build:
+## Architecture overview
 
-<div style="text-align: center;">
-  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-01/image01.png">
-</div>
+The following diagram shows the overall infrastructure you will deploy:
 
-The default route table contains:
+```mermaid
+graph TB
+    Internet((Internet))
 
-| Destination | Target           |
-|-------------|------------------|
-| 10.0.0.0/16 | local            |
-| 0.0.0.0     | Internet Gateway |
+    subgraph AWS[AWS Cloud - eu-west-3]
+        IGW[Internet Gateway]
 
-The source code is available on my [Github repository](https://github.com/richardpct/aws-terraform-tuto01).
+        subgraph VPC[VPC 10.0.0.0/16]
+            subgraph PublicSubnet[Public Subnet 10.0.0.0/24]
+                EC2[EC2 Instance<br/>Amazon Linux 2023<br/>t2.micro]
+                SG[Security Group<br/>Inbound: SSH 22, HTTP 80<br/>Outbound: All]
+            end
+            RT[Route Table<br/>10.0.0.0/16 → local<br/>0.0.0.0/0 → IGW]
+        end
 
-## Requirements
+        EIP[Elastic IP]
+    end
 
-* You must create a regular user in the IAM management console with some
-permissions to avoid using the root account
-* You must add your AWS credential on your local machine, for example by using
-~/.aws/config and ~/.aws/credentials files so that Terraform is able to make
-requests to the AWS API
-* You must install the latest Terraform version
+    S3[S3 Bucket<br/>OpenTofu State]
 
-## Create a S3 bucket
-
-Terraform needs to track the state of our current infrastructure somewhere, you
-could store the state on your local machine but in this case you are the only
-one who can access it. By using a S3 bucket for storing your Terraform state,
-your coworkers can also access it.<br />
-The first thing to do is to create a S3 bucket on AWS, you should never delete
-it because you will need it as long as you use AWS with Terraform.<br />
-
-You must create a working directory, let's say `~/terraform/tuto-01`, then
-create a file named `00-bucket/main.tf` containing:
-
-#### 00-bucket/providers.tf
-
-```
-// Setting a provider and a region
-provider "aws" {
-  region = var.region
-}
+    Internet <--> EIP
+    EIP <--> EC2
+    Internet <--> IGW
+    IGW <--> PublicSubnet
+    RT -.- PublicSubnet
+    SG -.- EC2
 ```
 
-We define the region to use.
+## Why split the code into separate stacks?
+
+Rather than putting all Terraform code in a single directory, this project is split into three independent stacks: **bucket**, **network**, and **webserver**. Each stack manages its own state and can be deployed or destroyed independently.
+
+This matters because if you need to change the instance type, you only destroy and rebuild the webserver stack — the network remains untouched. This saves time, reduces risk, and mirrors how real production infrastructure is organized.
+
+The stacks share data through the S3 bucket. The network stack exports its VPC ID and subnet ID to the remote state, and the webserver stack reads them:
+
+```mermaid
+graph LR
+    subgraph Stack 1
+        NET[01-network<br/>VPC, Subnet, IGW,<br/>Route Table]
+    end
+
+    subgraph Remote State
+        S3[(S3 Bucket<br/>terraform.tfstate)]
+    end
+
+    subgraph Stack 2
+        WEB[02-webserver<br/>EC2, Security Groups,<br/>Elastic IP]
+    end
+
+    NET -- "outputs:<br/>vpc_id<br/>subnet_public_id" --> S3
+    S3 -- "terraform_remote_state<br/>reads vpc_id &<br/>subnet_public_id" --> WEB
+```
+
+## Project structure
+
+```
+aws-terraform-tuto01/
+├── 00-bucket/          # S3 bucket for OpenTofu state (deployed first)
+│   ├── main.tf
+│   ├── Makefile
+│   ├── providers.tf
+│   ├── variables.tf
+│   └── versions.tf
+├── 01-network/         # VPC, subnet, Internet Gateway, route table
+│   ├── backends.tf
+│   ├── main.tf
+│   ├── Makefile
+│   ├── outputs.tf
+│   ├── providers.tf
+│   ├── variables.tf
+│   └── versions.tf
+└── 02-webserver/       # EC2 instance, security groups, Elastic IP
+    ├── backends.tf
+    ├── main.tf
+    ├── Makefile
+    ├── outputs.tf
+    ├── providers.tf
+    ├── variables.tf
+    └── versions.tf
+```
+
+Each directory contains a `Makefile` that wraps the `tofu init`, `tofu apply`, and `tofu destroy` commands, automatically sourcing your secret environment variables.
+
+## Prerequisites
+
+* You must create a regular user in the IAM management console with appropriate permissions — avoid using the root account.
+* You must configure your AWS credentials on your local machine (e.g., via `~/.aws/config` and `~/.aws/credentials`) so that OpenTofu can authenticate with the AWS API.
+* You must install the latest OpenTofu version (1.11.x or higher).
+
+## Prepare your variables
+
+Create a file at `~/terraform/aws-terraform-tuto01/terraform_vars_secrets` with the following content:
+
+```bash
+export TF_VAR_region="eu-west-3"
+export TF_VAR_bucket="XXXX-tofu-state"
+export TF_VAR_key_network="tuto-01/dev/network/terraform.tfstate"
+export TF_VAR_key_webserver="tuto-01/dev/webserver/terraform.tfstate"
+export TF_VAR_ssh_public_key="ssh-ed25519 AAAAXXXX"
+```
+
+Replace `XXXX-tofu-state` with a globally unique bucket name, and paste your actual SSH public key. The `TF_VAR_` prefix tells OpenTofu to map these environment variables to Terraform variables automatically.
+
+## Step 1 — Create the S3 bucket
+
+OpenTofu needs to store the state of your infrastructure somewhere. You could store it locally, but that means only you can access it. By using an S3 bucket, your coworkers can collaborate on the same infrastructure. This bucket should never be deleted as long as you use OpenTofu with AWS.
 
 #### 00-bucket/main.tf
 
-```
-// Creating a S3 bucket
-resource "aws_s3_bucket" "terraform_state" {
-  bucket = var.bucket
-  acl    = "private"
+```hcl
+resource "aws_s3_bucket" "tutos" {
+  bucket        = var.bucket
+  force_destroy = true
+}
 
-  versioning {
-    enabled = true
+resource "aws_s3_bucket_ownership_controls" "tutos" {
+  bucket = aws_s3_bucket.tutos.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
   }
+}
 
-// Comment the following block if you want to destroy your S3 bucket
-  lifecycle {
-    prevent_destroy = true
+resource "aws_s3_bucket_versioning" "tutos" {
+  bucket = aws_s3_bucket.tutos.id
+  versioning_configuration {
+    status = "Enabled"
   }
 }
 ```
 
-The `var.region` and `var.bucket` variables hold values that will be defined in
-the next section.
+This creates an S3 bucket with versioning enabled, which protects against accidental state corruption. The `force_destroy = true` flag allows the bucket to be cleaned up even if it still contains objects. The `BucketOwnerPreferred` ownership control ensures consistent permissions.
 
-#### 00-bucket/vars.tf
+#### 00-bucket/variables.tf
 
-Here is the definition of the variables that I mentionned in the previous
-section:
-
-```
+```hcl
 variable "region" {
   type        = string
-  description = "Region"
+  description = "region"
 }
 
 variable "bucket" {
   type        = string
-  description = "Bucket"
+  description = "bucket"
 }
 ```
 
-I could have set the variables by using the `default` attribute, but I prefer
-use the environment variables in order not to include them on my Github
-repository because some datas such as bucket name or SSH keys are sensible.
+The values are not set here with `default` — instead, they come from the `TF_VAR_` environment variables defined in your secrets file. This avoids committing sensitive data to your Git repository.
 
 #### 00-bucket/versions.tf
 
-I enforce the usage to a specific version of Terraform:
-
-```
+```hcl
 terraform {
-  required_version = ">= 1.0.0"
+  required_version = ">= 1.11.5"
 }
 ```
 
-#### Initialize the working directory
+This enforces a minimum OpenTofu version to avoid compatibility issues.
 
-You shoud have 3 files in your working directory:
+#### Deploy the bucket
 
-```
-├── 00-bucket
-│   ├── main.tf
-│   ├── providers.tf
-│   ├── vars.tf
-│   └── versions.tf
-```
+Initialize and apply:
 
-You must initialize your working directory in order to retrieve the Terraform
-plugins for AWS:
+    $ cd 00-bucket
+    $ make init
+    $ make apply
 
-    $ terraform init
+This creates a local `terraform.tfstate` file — this is the only stack where state is stored locally, since the bucket doesn't exist yet. From now on, all other stacks will store their state remotely in this bucket.
 
-You have now a new .terraform directory that is just created:
+## Step 2 — Create the network stack
 
-```
-├── 00-bucket
-│   ├── .terraform/
-│   ├── main.tf
-│   ├── providers.tf
-│   ├── vars.tf
-│   └── versions.tf
-```
-
-#### Deployment
-
-In the `vars.tf` file we have declared 2 variables: `region` and `bucket`.<br />
-Export the following environment variables in order to assign the values to the
-variables `region` and `bucket`:
-
-    $ export TF_VAR_region="eu-west-3"
-    $ export TF_VAR_bucket="mybucket-terraform-state"
-
-As you can see you must add the prefix `TF_VAR_` with the variable name so that
-Terraform figures out which variables to use.
-
-Let's create our S3 bucket:
-
-    $ terraform apply
-
-It will create a `terraform.tfstate` file containing the state of our bucket,
-you should never delete it!
-
-```
-├── 00-bucket
-│   ├── main.tf
-│   ├── providers.tf
-│   ├── terraform.tfstate
-│   ├── vars.tf
-│   └── versions.tf
-```
-
-Notice it is the only time that we store a Terraform state in our local
-machine, from now on, we will store the Terraform states of all our
-infrastructure in the bucket that we have just created.
-
-## Create the network component
-
-Create a new repository, let's say `~/terraform/tuto-01/01-network`.
+The network stack sets up the foundational AWS networking: a VPC, a public subnet, an Internet Gateway, and a route table that sends all outbound traffic through the gateway.
 
 #### 01-network/backends.tf
 
-We specify to Terraform that we use a remote backend in order to store our
-states:
-
-```
+```hcl
 terraform {
   backend "s3" {
+    bucket = var.bucket
+    key    = var.key_network
+    region = var.region
   }
 }
 ```
 
-#### 01-network/providers.tf
-
-Select our AWS region:
-
-```
-provider "aws" {
-  region = var.region
-}
-```
+This tells OpenTofu to store the network stack's state in the S3 bucket created in Step 1, under the key path `tuto-01/dev/network/terraform.tfstate`.
 
 #### 01-network/main.tf
 
-Create our VPC:
-
-```
+```hcl
 resource "aws_vpc" "my_vpc" {
   cidr_block = var.vpc_cidr_block
 
@@ -223,9 +234,9 @@ resource "aws_vpc" "my_vpc" {
 }
 ```
 
-Create a Internet Gateway assiociated to our VPC:
+This creates a VPC with the CIDR block `10.0.0.0/16`, giving you 65,536 private IP addresses to work with.
 
-```
+```hcl
 resource "aws_internet_gateway" "my_igw" {
   vpc_id = aws_vpc.my_vpc.id
 
@@ -235,9 +246,9 @@ resource "aws_internet_gateway" "my_igw" {
 }
 ```
 
-Create a subnet in our VPC:
+The Internet Gateway is the bridge between your VPC and the public internet. Without it, nothing inside the VPC can reach the outside world.
 
-```
+```hcl
 resource "aws_subnet" "public" {
   vpc_id     = aws_vpc.my_vpc.id
   cidr_block = var.subnet_public
@@ -248,9 +259,9 @@ resource "aws_subnet" "public" {
 }
 ```
 
-Create a default route to the Internet Gateway:
+This carves out a `/24` subnet (256 addresses) from the VPC. It will become a "public" subnet once we route its traffic through the Internet Gateway.
 
-```
+```hcl
 resource "aws_default_route_table" "route" {
   default_route_table_id = aws_vpc.my_vpc.default_route_table_id
 
@@ -263,111 +274,53 @@ resource "aws_default_route_table" "route" {
     Name = "default route"
   }
 }
-```
 
-Associate the default route table with our subnet:
-
-```
 resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_default_route_table.route.id
 }
 ```
 
-Our subnet is public because its default route is the Internet Gateway, that is
-this subnet is able to reach Internet, and outside is able to reach the
-instance inside this subnet.
+The default route (`0.0.0.0/0`) sends all non-local traffic to the Internet Gateway. Associating this route table with the subnet is what makes it a public subnet — instances inside it can both reach the internet and be reached from the internet (subject to security group rules).
 
-#### 01-network/vars.tf
+The resulting route table contains:
 
-Declare the variables and define the values:
-
-```
-variable "region" {
-  type        = string
-  description = "Region"
-  default     = "eu-west-3"
-}
-
-variable "vpc_cidr_block" {
-  type        = string
-  description = "VPC cidr block"
-  default     = "10.0.0.0/16"
-}
-
-variable "subnet_public" {
-  type        = string
-  description = "Public subnet"
-  default     = "10.0.0.0/24"
-}
-```
+| Destination  | Target           |
+|------------- |------------------|
+| 10.0.0.0/16  | local            |
+| 0.0.0.0/0    | Internet Gateway |
 
 #### 01-network/outputs.tf
 
-We need to track some datas on our S3 bucket such as the VPC ID and the Public
-Subnet ID so that they will be used later by the webserver stack, because for
-building the webserver you will need to get the VPC ID and the public subnet ID
-to be able to reference it:
-
-```
+```hcl
 output "vpc_id" {
   value       = aws_vpc.my_vpc.id
-  description = "VPC ID"
+  description = "vpc id"
 }
 
 output "subnet_public_id" {
   value       = aws_subnet.public.id
-  description = "Subnet Public ID"
+  description = "subnet public id"
 }
 ```
 
-#### Deployment
+These outputs are critical: they export the VPC ID and subnet ID to the remote state in S3, so that the webserver stack can reference them without hardcoding any IDs.
 
-You shoud have these files in your 01-network directory:
+#### Deploy the network
 
-```
-├── 01-network
-│   ├── backends.tf
-│   ├── main.tf
-│   ├── outputs.tf
-│   ├── providers.tf
-│   ├── vars.tf
-│   └── versions.tf
-```
+    $ cd ../01-network
+    $ make init
+    $ make apply
 
-Export the following variables in order to specify our region, bucket and the
-network key:
+## Step 3 — Create the webserver stack
 
-    $ export TF_VAR_region="eu-west-3"
-    $ export TF_VAR_bucket="yourbucket-terraform-state"
-    $ export TF_VAR_key_network="terraform/dev/network/terraform.tfstate"
-
-Initialize your working Terraform directory:
-
-    $ terraform init \
-          -backend-config="bucket=${TF_VAR_bucket}" \
-          -backend-config="key=${TF_VAR_key_network}" \
-          -backend-config="region=${TF_VAR_region}"
-
-`bucket` is the name of the bucket that we have defined earlier, and `key` is
-where our state will be stored.
-
-Then build your network stack:
-
-    $ terraform apply
-
-## Create the WebServer component
-
-For this section I will show only the relevant snippet, to see the complete
-code go to my [Github repository](https://github.com/richardpct/aws-terraform-tuto01).
-<br />
-Create a directory named `02-webserver` in your working directory.<br />
+This stack creates the EC2 instance with all its dependencies: an SSH key pair, security groups for firewall rules, and an Elastic IP for a stable public address.
 
 #### 02-webserver/backends.tf
 
-I declare a data object that retrieves the network information from our bucket:
+The webserver stack reads the network stack's outputs from S3 using `terraform_remote_state`:
 
-```
+```hcl
 data "terraform_remote_state" "network" {
   backend = "s3"
 
@@ -379,27 +332,22 @@ data "terraform_remote_state" "network" {
 }
 ```
 
-The following figure explains how some informations can be shared between 2
-distinct stacks using a S3 bucket:
-
-<div style="text-align: center;">
-  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-01/image02.png">
-</div>
+This is how stacks communicate: the network stack wrote `vpc_id` and `subnet_public_id` to S3, and the webserver stack reads them back with `data.terraform_remote_state.network.outputs.vpc_id`.
 
 #### 02-webserver/main.tf
 
-I define a public SSH key resource in order to copy it to the Linux server:
+**SSH key pair** — uploads your public key to AWS so you can SSH into the instance:
 
-```
+```hcl
 resource "aws_key_pair" "deployer" {
   key_name   = "deployer-key"
   public_key = var.ssh_public_key
 }
 ```
 
-I create a Security Group for the WebServer:
+**Security group** — a virtual firewall attached to the instance. It is associated with the VPC created by the network stack:
 
-```
+```hcl
 resource "aws_security_group" "webserver" {
   name   = "sg_webserver"
   vpc_id = data.terraform_remote_state.network.outputs.vpc_id
@@ -410,10 +358,9 @@ resource "aws_security_group" "webserver" {
 }
 ```
 
-I create a firewall rule that allows anyone to connect to our server via SSH
-(in the real world we should only allow our own IP to connect to our instance):
+**Firewall rules** — three rules define what traffic is allowed:
 
-```
+```hcl
 resource "aws_security_group_rule" "inbound_ssh" {
   type              = "ingress"
   from_port         = 22
@@ -422,11 +369,7 @@ resource "aws_security_group_rule" "inbound_ssh" {
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.webserver.id
 }
-```
 
-The following rule allows anyone to make HTTP requests to our server:
-
-```
 resource "aws_security_group_rule" "inbound_http" {
   type              = "ingress"
   from_port         = 80
@@ -435,12 +378,7 @@ resource "aws_security_group_rule" "inbound_http" {
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.webserver.id
 }
-```
 
-The following rule allows our server to reach Internet for being able to update
-the Linux system:
-
-```
 resource "aws_security_group_rule" "outbound_all" {
   type              = "egress"
   from_port         = 0
@@ -451,9 +389,26 @@ resource "aws_security_group_rule" "outbound_all" {
 }
 ```
 
-We build a server using a Amazon Linux image:
+The first rule allows SSH access (port 22) from anywhere. In a production environment, you would restrict this to your own IP address. The second rule allows HTTP traffic (port 80) from anywhere — this is how users will reach your web server. The third rule allows all outbound traffic, so the instance can download packages and updates.
 
+The security group rules can be visualized as:
+
+```mermaid
+graph LR
+    World((Internet))
+
+    subgraph SG[Security Group]
+        EC2[EC2 Instance]
+    end
+
+    World -- "TCP 22 SSH" --> EC2
+    World -- "TCP 80 HTTP" --> EC2
+    EC2 -- "All outbound" --> World
 ```
+
+**EC2 instance** — the virtual machine itself:
+
+```hcl
 resource "aws_instance" "web" {
   ami                    = var.image_id
   instance_type          = var.instance_type
@@ -462,148 +417,79 @@ resource "aws_instance" "web" {
   vpc_security_group_ids = [aws_security_group.webserver.id]
 
   tags = {
-    Name = "Web Server"
+    Name = "web server"
   }
 }
 ```
 
-We create a Elastic IP which is attached to our server so that it can
-communicate with Internet:
+This launches a `t2.micro` instance (free tier eligible) running Amazon Linux 2023. It is placed in the public subnet and protected by the security group. The SSH key is injected so you can connect to it.
 
-```
+**Elastic IP** — a static public IP address attached to the instance:
+
+```hcl
 resource "aws_eip" "web" {
   instance = aws_instance.web.id
-  vpc      = true
+  domain   = "vpc"
 }
 ```
 
-#### 02-webserver/vars.tf
-
-Define the following variables with the values:
-
-```
-variable "region" {
-  type        = string
-  description = "Region"
-  default     = "eu-west-3"
-}
-
-variable "bucket" {
-  type        = string
-  description = "Bucket"
-}
-
-variable "key_network" {
-  type        = string
-  description = "Network key"
-}
-
-variable "image_id" {
-  type        = string
-  description = "image id"
-  default     = "ami-0ebc281c20e89ba4b" // Amazon Linux 2018
-}
-
-variable "instance_type" {
-  type        = string
-  description = "instance type"
-  default     = "t2.micro"
-}
-
-variable "ssh_public_key" {
-  type        = string
-  description = "ssh public key"
-}
-```
+Without an Elastic IP, your instance would get a random public IP that changes every time the instance stops and starts. The Elastic IP gives you a stable address.
 
 #### 02-webserver/outputs.tf
 
-Display the public IP of our server so that we can connect to it:
-
-```
+```hcl
 output "public_ip" {
-  description = "Public IP"
+  description = "public ip"
   value       = aws_eip.web.public_ip
 }
 ```
 
-#### Deployment
+After deployment, this displays the public IP address you can use to connect to your server.
 
-You should have these files in your working directory:
+#### Deploy the webserver
+
+    $ cd ../02-webserver
+    $ make init
+    $ make apply
+
+The output will display something like:
 
 ```
-├── 00-bucket
-│   ├── main.tf
-│   ├── providers.tf
-│   ├── terraform.tfstate
-│   ├── vars.tf
-│   └── versions.tf
-├── 01-network
-│   ├── backends.tf
-│   ├── main.tf
-│   ├── outputs.tf
-│   ├── providers.tf
-│   ├── vars.tf
-│   └── versions.tf
-├── 02-webserver
-│   ├── backends.tf
-│   ├── main.tf
-│   ├── outputs.tf
-│   ├── providers.tf
-│   ├── vars.tf
-│   └── versions.tf
+Outputs:
+
+public_ip = "35.180.xx.xx"
 ```
 
-Export the following environment variable containing your public SSH key:
+## Step 4 — Install Nginx
 
-    $ export TF_VAR_ssh_public_key="ssh-rsa XYZ..."
-
-Initialize your working Terraform directory:
-
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_key_webserver}" \
-        -backend-config="region=${TF_VAR_region}"
-
-Then build the server:
-
-    $ terraform apply
-
-## Install a Web Server with Nginx
-
-The previous command displays on the output the public IP address of our
-webserver, wait for a while then connect to it via SSH:
+Wait a few seconds for the instance to boot, then connect via SSH using the Elastic IP from the output:
 
     $ ssh ec2-user@xx.xx.xx.xx
-    # sudo su -
+
+Once connected, install and start Nginx:
+
+    $ sudo su -
     # yum update
     # yum install nginx
+    # systemctl start nginx
 
-Afterwards open your web browser using the IP address of your webserver.
+Now open your web browser and navigate to `http://xx.xx.xx.xx` — you should see the default Nginx welcome page. Congratulations, your web server is live!
 
 ## Clean up
 
-When you have finished to build your infrastructure, you can destroy it:
+When you are done, destroy the infrastructure in reverse order:
 
-    $ cd ../02-webserver
-    $ terraform destroy
+    $ cd 02-webserver
+    $ make destroy
     $ cd ../01-network
-    $ terraform destroy
+    $ make destroy
 
-You don't need to clean up our bucket because we will need it in the next
-tutorials for storing our Terraform states.<br />
-<br />
-You may be wondering why I have decided to split the Terraform code in 3
-sections instead of writing it in the same directory?<br />
-In the case that you have written all your code in the same directory, if you
-want for example modify the type of your instance, you should destroy all your
-infrastructure then rebuild it. In the case of our Terraform code is splitted,
-we only destroy then rebuild the webserver stack, the network stack remains
-unchanged, hence we save more times.
+You do not need to destroy the S3 bucket — you will reuse it in future tutorials for storing OpenTofu state.
 
 ## Summary
 
-Congratulation to you if you have succeeded to follow this tutorial!<br />
-As you can see it is not so hard to build a infrastructure using Terraform, in
-the next tutorial I will show you how to organize better your code using the
-modules.
+Congratulations if you have followed this tutorial to the end! You have learned how to use OpenTofu to deploy a complete AWS infrastructure from scratch — a VPC with networking, an EC2 instance with firewall rules, and a web server accessible from the internet.
+
+More importantly, you have seen how to organize your code into independent stacks that communicate through remote state in S3. This pattern scales well: you can modify or rebuild one layer without touching the others.
+
+In the next tutorial, I will show you how to organize your code even better using Terraform modules for reusability.
