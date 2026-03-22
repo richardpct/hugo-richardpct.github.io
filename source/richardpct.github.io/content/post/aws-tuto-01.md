@@ -138,7 +138,9 @@ export TF_VAR_ssh_public_key="ssh-ed25519 AAAAXXXX"
 
 Replace `XXXX-tofu-state` with a globally unique bucket name, and paste your actual SSH public key. The `TF_VAR_` prefix tells OpenTofu to map these environment variables to Terraform variables automatically.
 
-## Step 1 — Create the S3 bucket
+## Deploy your infrastructure
+
+### Step 1 — Create the S3 bucket
 
 OpenTofu needs to store the state of your infrastructure somewhere. You could store it locally, but that means only you can access it. By using an S3 bucket, your coworkers can collaborate on the same infrastructure. This bucket should never be deleted as long as you use OpenTofu with AWS.
 
@@ -204,7 +206,7 @@ Initialize and apply:
 
 This creates a local `terraform.tfstate` file — this is the only stack where state is stored locally, since the bucket doesn't exist yet. From now on, all other stacks will store their state remotely in this bucket.
 
-## Step 2 — Create the network stack
+### Step 2 — Create the network stack
 
 The network stack sets up the foundational AWS networking: a VPC, a public subnet, an Internet Gateway, and a route table that sends all outbound traffic through the gateway.
 
@@ -312,11 +314,11 @@ These outputs are critical: they export the VPC ID and subnet ID to the remote s
     $ make init
     $ make apply
 
-## Step 3 — Create the webserver stack
+### Step 3 — Create the webserver stack
 
 This stack creates the EC2 instance with all its dependencies: an SSH key pair, security groups for firewall rules, and an Elastic IP for a stable public address.
 
-#### 02-webserver/backends.tf
+#### 02-webserver/main.tf
 
 The webserver stack reads the network stack's outputs from S3 using `terraform_remote_state`:
 
@@ -460,7 +462,7 @@ Outputs:
 public_ip = "35.180.xx.xx"
 ```
 
-## Step 4 — Install Nginx
+### Step 4 — Install Nginx
 
 Wait a few seconds for the instance to boot, then connect via SSH using the Elastic IP from the output:
 
