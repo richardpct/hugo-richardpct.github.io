@@ -14,7 +14,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](/post/2026/03/24/aws-with-opentofu-public-and-private-subnets-with-a-database/), we isolated our Redis database in a private subnet. But there was a security gap: the webserver still accepted SSH connections directly from the internet (restricted to your IP, but still exposed). If the webserver is compromised via SSH, an attacker has a direct foothold in your VPC.
+In the [previous tutorial](https://richardpct.github.io/post/2021/03/16/aws-with-opentofu-public-and-private-subnets-with-a-database/), we isolated our Redis database in a private subnet. But there was a security gap: the webserver still accepted SSH connections directly from the internet (restricted to your IP, but still exposed). If the webserver is compromised via SSH, an attacker has a direct foothold in your VPC.
 
 In this tutorial, we add a **bastion host** (also called a jump server) to solve this problem. The bastion is the only instance that accepts SSH from the internet. To reach the webserver or the database via SSH, you must first jump through the bastion. This is a standard security pattern in production infrastructure.
 
@@ -77,13 +77,12 @@ The key security improvement is that SSH access now goes through the bastion. No
 ```mermaid
 graph LR
     You[Your IP] -- "SSH :22" --> BASTION[Bastion]
-    BASTION -- "SSH :22" --> WEB[Webserver]
-    BASTION -- "SSH :22" --> DB[Database]
-    Internet((Internet)) -. "SSH Blocked" .-> WEB
-    Internet -. "SSH Blocked" .-> DB
+    BASTION -- "SSH :22" --> WEB["Webserver<br/>(public subnet)"]
+    BASTION -- "SSH :22" --> DB["Database<br/>(private subnet)"]
+    Internet((Internet)) -. "SSH blocked by SG" .-> WEB
 ```
 
-In practice, you use SSH's `-J` (jump) option to connect through the bastion transparently:
+The webserver is in a public subnet but its security group only allows SSH from the bastion — not from the internet. The database doesn't even need a security group rule to block SSH from the internet: it lives in the private subnet, which has no inbound route from outside the VPC. The only way to reach it via SSH is through the bastion.
 
 ```bash
 # Connect to the database via the bastion
@@ -195,18 +194,29 @@ resource "aws_security_group_rule" "bastion_from_me_ssh" {
 }
 ```
 
-The bastion also needs an egress rule to SSH out to other instances, plus HTTP/HTTPS egress for system updates:
+The bastion also needs egress rules to SSH out to the webserver and database specifically, plus HTTP/HTTPS egress for system updates. Rather than allowing SSH to anywhere (`0.0.0.0/0`), we restrict the bastion's outbound SSH to only the webserver and database security groups:
 
 ```hcl
-resource "aws_security_group_rule" "bastion_to_any_ssh" {
-  type              = "egress"
-  from_port         = local.ssh_port
-  to_port           = local.ssh_port
-  protocol          = "tcp"
-  cidr_blocks       = local.anywhere
-  security_group_id = aws_security_group.bastion.id
+resource "aws_security_group_rule" "bastion_to_web_ssh" {
+  type                     = "egress"
+  from_port                = local.ssh_port
+  to_port                  = local.ssh_port
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.webserver.id
+  security_group_id        = aws_security_group.bastion.id
+}
+
+resource "aws_security_group_rule" "bastion_to_db_ssh" {
+  type                     = "egress"
+  from_port                = local.ssh_port
+  to_port                  = local.ssh_port
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.database.id
+  security_group_id        = aws_security_group.bastion.id
 }
 ```
+
+This is tighter than allowing SSH to `0.0.0.0/0`: even if someone gains access to the bastion, they can only SSH to instances that belong to the webserver or database security groups — not to arbitrary hosts on the internet.
 
 ### The bastion module
 
@@ -336,7 +346,7 @@ Connect to the webserver (Amazon Linux) through the bastion:
 
     $ ssh -J ec2-user@<bastion_public_ip> ec2-user@<webserver_private_ip>
 
-Try connecting directly to the webserver without the bastion — it will be refused by the security group.
+Try connecting directly to the webserver or database without the bastion — it will be refused by the security group.
 
 ## Clean up
 
@@ -353,7 +363,7 @@ Destroy in reverse order:
 
 ## Summary
 
-In this tutorial, we added a bastion host as the single SSH entry point to our infrastructure. The webserver no longer accepts SSH from the internet — only from the bastion's security group. We also separated each service into its own subnet for better isolation.
+In this tutorial, we added a bastion host as the single SSH entry point to our infrastructure. The webserver and database no longer accept SSH from the internet — only from the bastion's security group. We also separated each service into its own subnet for better isolation.
 
 The security model is now layered: your IP can SSH into the bastion, the bastion can SSH into everything else, the webserver can talk to Redis, and the database can only reach the internet outbound through the NAT Gateway. Each of these rules is enforced by security groups that reference other security groups, not CIDR blocks — so the rules follow the instances even if their IPs change.
 
