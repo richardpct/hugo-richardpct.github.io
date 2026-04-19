@@ -1,53 +1,149 @@
 ---
-title: "AWS with Terraform tutorial 05"
-date: 2021-03-27T20:01:59Z
-draft: false
+title: "AWS with OpenTofu: Adding a Bastion Host for Secure SSH Access"
+date: 2026-03-25
+toc: true
+tags:
+- aws
+- opentofu
+- terraform
+- bastion
+- security
+categories:
+- tutorial
 ---
 
 ## Purpose
-This tutorial takes up the previous one
-[aws-with-terraform-tutorial-04](https://richardpct.github.io/post/2021/03/16/aws-with-terraform-tutorial-04/)
-by adding a bastion server which is the only one that is allowed to connect to
-the database and the webserver via SSH for improving the security of your
-infrastructure.
 
-Here are the components you will build:
+In the [previous tutorial](/post/2026/03/24/aws-with-opentofu-public-and-private-subnets-with-a-database/), we isolated our Redis database in a private subnet. But there was a security gap: the webserver still accepted SSH connections directly from the internet (restricted to your IP, but still exposed). If the webserver is compromised via SSH, an attacker has a direct foothold in your VPC.
 
-* Creating a VPC with 3 public subnets and a private subnet
-* Creating a bastion server in a public subnet which is the only server that
-can be reachable from the Internet via SSH, and it is the only that is allowed
-to connect to the database and the webserver via SSH
-* Creating a web server in a public subnet
-* Creating a database server using Redis which stores the count of requests
-* Creating a NAT gateway with an Elastic IP (EIP) in a public subnet so that
-the database which is in the private subnet is able to reach Internet
+In this tutorial, we add a **bastion host** (also called a jump server) to solve this problem. The bastion is the only instance that accepts SSH from the internet. To reach the webserver or the database via SSH, you must first jump through the bastion. This is a standard security pattern in production infrastructure.
 
-Notice: For the exercise I do not use "Elastic Cache" service provided by AWS,
-instead I use an EC2 instance and I install Redis manually.
+Here is what we build:
 
-The following figure depicts the infrastructure you will build:
+* A **VPC with 4 subnets** — 3 public subnets (NAT Gateway, bastion, webserver) and 1 private subnet (database)
+* A **bastion host** in its own public subnet — the only entry point for SSH from the internet
+* A **webserver** in a public subnet — accepts HTTP from the internet but SSH only from the bastion
+* A **Redis database** in a private subnet — accepts Redis connections only from the webserver and SSH only from the bastion
+* A **NAT Gateway** in its own public subnet — allows the database to reach the internet for package updates
 
-<div style="text-align: center;">
-  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-05/image01.png">
-</div>
+Note: for this exercise I do not use the ElastiCache managed service. Instead, I install Redis on a plain EC2 instance to demonstrate the networking concepts.
 
-The Terraform code can be found [here](https://github.com/richardpct/aws-terraform-tuto05).
+The full source code is available on my [GitHub repository](https://github.com/richardpct/aws-terraform-tuto05).
 
-## Configuring the network
+## Architecture overview
 
-#### environments/dev/00-network/main.tf
+```mermaid
+graph TB
+    Internet((Internet))
+    You[Your IP]
 
-I could create a public subnet containing all the services (Nat Gateway, web
-service and bastion) but it's better to isolate each stack for reducing the
-concerns, to do so, I create a first public subnet containing a Nat Gateway, a
-second public subnet containing the bastion and a third public subnet
-containing a web server:
+    subgraph VPC[VPC 10.0.0.0/16]
+        IGW[Internet Gateway]
+
+        subgraph SubNAT["Public Subnet NAT - 10.0.0.0/24"]
+            NAT[NAT Gateway + EIP]
+        end
+
+        subgraph SubBastion["Public Subnet Bastion - 10.0.1.0/24"]
+            BASTION["Bastion EC2<br/>Amazon Linux"]
+        end
+
+        subgraph SubWeb["Public Subnet Web - 10.0.2.0/24"]
+            WEB["Webserver EC2<br/>Python HTTP :8000"]
+        end
+
+        subgraph SubPrivate["Private Subnet - 10.0.3.0/24"]
+            DB["Database EC2<br/>Ubuntu + Redis :6379"]
+        end
+    end
+
+    You -- "SSH :22" --> IGW
+    IGW -- "SSH :22" --> BASTION
+    BASTION -. "SSH :22" .-> WEB
+    BASTION -. "SSH :22" .-> DB
+    Internet -- "HTTP :8000" --> IGW
+    IGW -- "HTTP :8000" --> WEB
+    WEB -- "Redis :6379" --> DB
+    DB -- "HTTP/S outbound" --> NAT
+    NAT --> IGW
+```
+
+Each service lives in its own subnet, which reduces the blast radius of a security issue and makes the firewall rules clearer. In the previous tutorial, the webserver and NAT Gateway shared the same public subnet — now they are separated.
+
+## SSH access flow
+
+The key security improvement is that SSH access now goes through the bastion. Nobody can SSH directly into the webserver or the database from the internet:
+
+```mermaid
+graph LR
+    You[Your IP] -- "SSH :22" --> BASTION[Bastion]
+    BASTION -- "SSH :22" --> WEB[Webserver]
+    BASTION -- "SSH :22" --> DB[Database]
+    Internet((Internet)) -. "SSH Blocked" .-> WEB
+    Internet -. "SSH Blocked" .-> DB
+```
+
+In practice, you use SSH's `-J` (jump) option to connect through the bastion transparently:
+
+```bash
+# Connect to the database via the bastion
+ssh -J ec2-user@<bastion_public_ip> ubuntu@<database_private_ip>
+
+# Connect to the webserver via the bastion
+ssh -J ec2-user@<bastion_public_ip> ec2-user@<webserver_private_ip>
+```
+
+The `-J` flag tells SSH to first connect to the bastion, then tunnel through it to reach the target. From your perspective, it feels like a direct connection.
+
+## Project structure
 
 ```
-module "network" {
-  source = "../../../modules/network"
+aws-terraform-tuto05/
+├── modules/
+│   ├── network/              # VPC, 4 subnets, IGW, NAT, security groups
+│   │   ├── main.tf
+│   │   ├── sg.tf
+│   │   ├── outputs.tf
+│   │   ├── providers.tf
+│   │   └── variables.tf
+│   ├── bastion/              # Bastion EC2 in public subnet
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── providers.tf
+│   │   └── variables.tf
+│   ├── database/             # Redis EC2 in private subnet
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── providers.tf
+│   │   ├── user-data.sh
+│   │   └── variables.tf
+│   └── webserver/            # Python webserver EC2 in public subnet
+│       ├── main.tf
+│       ├── outputs.tf
+│       ├── providers.tf
+│       ├── user-data.sh
+│       └── variables.tf
+└── envs/
+    └── dev/
+        ├── 01-network/
+        ├── 02-bastion/
+        ├── 03-database/
+        └── 04-webserver/
+```
 
-  region                = "eu-west-3"
+Compared to tutorial 04, the new addition is the `bastion` module and the `02-bastion` stack. The deployment order now has four steps: network, bastion, database, webserver. The bastion stack creates the SSH key pair that is shared with the database and webserver stacks via remote state.
+
+## What changed from tutorial 04
+
+### Four subnets instead of two
+
+The network module now creates four subnets, each dedicated to a specific purpose:
+
+```hcl
+module "network" {
+  source                = "../../../modules/network"
+  aws_profile           = var.aws_profile
+  region                = var.region
   env                   = "dev"
   vpc_cidr_block        = "10.0.0.0/16"
   subnet_public_nat     = "10.0.0.0/24"
@@ -58,31 +154,15 @@ module "network" {
 }
 ```
 
-I will show you only the excerpt code related to the SSH rules, the other rules
-are similar to the previous tutorial. The following rules allow your own IP to
-connect to the bastion, and the bastion is allow to connect to the web server
-and the database:
+All three public subnets share the same custom route table (default route → Internet Gateway), and the private subnet uses the default route table (default route → NAT Gateway). Isolating each service in its own subnet is a best practice because you can apply different network ACLs per subnet if needed.
 
-```
-resource "aws_security_group_rule" "bastion_inbound_ssh" {
-  type              = "ingress"
-  from_port         = local.ssh_port
-  to_port           = local.ssh_port
-  protocol          = "tcp"
-  cidr_blocks       = [var.cidr_allowed_ssh]
-  security_group_id = aws_security_group.bastion.id
-}
+### SSH rules now go through the bastion
 
-resource "aws_security_group_rule" "bastion_outbound_ssh" {
-  type              = "egress"
-  from_port         = local.ssh_port
-  to_port           = local.ssh_port
-  protocol          = "tcp"
-  cidr_blocks       = local.anywhere
-  security_group_id = aws_security_group.bastion.id
-}
+In tutorial 04, the webserver's SSH rule allowed your IP directly. Now, SSH access to both the webserver and the database is restricted to the bastion's security group:
 
-resource "aws_security_group_rule" "database_inbound_ssh" {
+```hcl
+# Only the bastion can SSH into the database
+resource "aws_security_group_rule" "db_from_bastion_ssh" {
   type                     = "ingress"
   from_port                = local.ssh_port
   to_port                  = local.ssh_port
@@ -91,7 +171,8 @@ resource "aws_security_group_rule" "database_inbound_ssh" {
   security_group_id        = aws_security_group.database.id
 }
 
-resource "aws_security_group_rule" "webserver_inbound_ssh" {
+# Only the bastion can SSH into the webserver
+resource "aws_security_group_rule" "web_from_bastion_ssh" {
   type                     = "ingress"
   from_port                = local.ssh_port
   to_port                  = local.ssh_port
@@ -101,17 +182,41 @@ resource "aws_security_group_rule" "webserver_inbound_ssh" {
 }
 ```
 
-## Creating the bastion
+And only your IP can SSH into the bastion:
 
-#### modules/bastion/main.tf
-
-The bastion is created like a web server, except that we don't install anything:
-
+```hcl
+resource "aws_security_group_rule" "bastion_from_me_ssh" {
+  type              = "ingress"
+  from_port         = local.ssh_port
+  to_port           = local.ssh_port
+  protocol          = "tcp"
+  cidr_blocks       = [var.cidr_allowed_ssh]
+  security_group_id = aws_security_group.bastion.id
+}
 ```
+
+The bastion also needs an egress rule to SSH out to other instances, plus HTTP/HTTPS egress for system updates:
+
+```hcl
+resource "aws_security_group_rule" "bastion_to_any_ssh" {
+  type              = "egress"
+  from_port         = local.ssh_port
+  to_port           = local.ssh_port
+  protocol          = "tcp"
+  cidr_blocks       = local.anywhere
+  security_group_id = aws_security_group.bastion.id
+}
+```
+
+### The bastion module
+
+The bastion is a minimal EC2 instance — no application is installed on it, just system updates. It exists purely as an SSH gateway:
+
+```hcl
 resource "aws_instance" "bastion" {
-  ami                    = var.image_id
+  ami                    = data.aws_ami.amazonlinux.id
   user_data              = <<-EOF
-                           #!/bin/bash
+                           #!/usr/bin/env bash
                            exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
                            sudo yum -y update
                            sudo yum -y upgrade
@@ -128,7 +233,7 @@ resource "aws_instance" "bastion" {
 
 resource "aws_eip" "bastion" {
   instance = aws_instance.bastion.id
-  vpc      = true
+  domain   = "vpc"
 
   tags = {
     Name = "eip_bastion-${var.env}"
@@ -136,79 +241,120 @@ resource "aws_eip" "bastion" {
 }
 ```
 
-## Deploying the infrastructure
+The bastion gets its own Elastic IP so you always connect to the same address. It also creates the SSH key pair, which is exported via outputs and reused by the database and webserver stacks — this way, all instances share the same SSH key.
 
-Export some environment variables:
+### Shared SSH key via remote state
 
-    $ export TF_VAR_region="eu-west-3"
-    $ export TF_VAR_bucket="yourbucket-terraform-state"
-    $ export TF_VAR_dev_network_key="terraform/tuto05/dev/network/terraform.tfstate"
-    $ export TF_VAR_dev_bastion_key="terraform/tuto05/dev/bastion/terraform.tfstate"
-    $ export TF_VAR_dev_database_key="terraform/tuto05/dev/database/terraform.tfstate"
-    $ export TF_VAR_dev_webserver_key="terraform/tuto05/dev/webserver/terraform.tfstate"
-    $ export TF_VAR_ssh_public_key="ssh-rsa..."
-    $ export TF_VAR_my_ip_address=$(curl -s 'https://duckduckgo.com/?q=ip&t=h_&ia=answer' \
-    | sed -e 's/.*Your IP address is \([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\) in.*/\1/')
+The bastion module creates the SSH key pair and exports it:
 
-building:
+```hcl
+output "ssh_key" {
+  value = aws_key_pair.deployer.key_name
+}
+```
 
-    $ cd environments/dev
-    $ cd 00-network
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_network_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
-    $ cd ../01-bastion
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_bastion_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
-    $ cd ../02-database
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_database_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
-    $ cd ../03-webserver
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_webserver_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
+The database and webserver modules read it from the bastion's remote state:
 
-## Testing your infrastructure
+```hcl
+key_name = data.terraform_remote_state.bastion.outputs.ssh_key
+```
 
-When your infrastructure is built, wait for a while, then issue the following
-command several times for increasing the counter:
+This ensures all instances use the same key, and the key is only created once.
 
-    $ curl http://ip_public_webserver:8000/cgi-bin/hello.py
+## Stack dependency chain
 
-It should return the count of requests you have performed.
+With four stacks, the remote state dependency chain is now:
 
-## Connecting to the database and the web server via SSH
+```mermaid
+graph LR
+    NET[01-network] --> BASTION[02-bastion]
+    NET --> DATABASE[03-database]
+    NET --> WEBSERVER[04-webserver]
+    BASTION --> DATABASE
+    BASTION --> WEBSERVER
+    DATABASE --> WEBSERVER
+```
 
-    $ ssh -J ec2-user@public_ip_bastion ubuntu@private_ip_database
-    $ ssh -J ec2-user@public_ip_bastion ec2-user@private_ip_webserver
+The webserver stack reads from three remote states: network (subnet and security group IDs), bastion (SSH key), and database (Redis private IP). This is the most complex dependency graph we have built so far.
 
-## Destroying your infrastructure
+## Deploy the infrastructure
 
-After finishing your test, destroy your infrastructure:
+### Prepare your variables
 
-    $ cd environments/dev
-    $ cd 03-webserver
-    $ terraform destroy
-    $ cd ../02-database
-    $ terraform destroy
-    $ cd ../01-bastion
-    $ terraform destroy
-    $ cd ../00-network
-    $ terraform destroy
+Create a file at `~/terraform/aws-terraform-tuto05/terraform_vars_dev_secrets`:
+
+```bash
+export TF_VAR_aws_profile="dev"
+export TF_VAR_region="eu-west-3"
+export TF_VAR_bucket="XXXX-tofu-state"
+export TF_VAR_key_network="tuto05/dev/network/terraform.tfstate"
+export TF_VAR_key_bastion="tuto05/dev/bastion/terraform.tfstate"
+export TF_VAR_key_database="tuto05/dev/database/terraform.tfstate"
+export TF_VAR_key_webserver="tuto05/dev/webserver/terraform.tfstate"
+export TF_VAR_ssh_public_key="ssh-ed25519 AAAAXXX..."
+export TF_VAR_dev_database_pass="XXXX"
+MY_IP=$(curl -s ifconfig.co/)
+export TF_VAR_my_ip_address="$MY_IP/32"
+```
+
+### Build
+
+Deploy the four stacks in order:
+
+    $ cd envs/dev/01-network
+    $ make apply
+    $ cd ../02-bastion
+    $ make apply
+    $ cd ../03-database
+    $ make apply
+    $ cd ../04-webserver
+    $ make apply
+
+### Test the webserver
+
+Wait a moment for the user-data scripts to finish, then test the web application:
+
+    $ curl http://<webserver_public_ip>:8000/cgi-bin/hello.py
+
+You should see:
+
+```html
+<html><body>
+<p>Hello World!<br />counter: 1<br />env: dev</p>
+</body></html>
+```
+
+Run it again — the counter increments, confirming the webserver is communicating with Redis through the private subnet.
+
+### Test SSH via the bastion
+
+Connect to the database (Ubuntu) through the bastion:
+
+    $ ssh -J ec2-user@<bastion_public_ip> ubuntu@<database_private_ip>
+
+Connect to the webserver (Amazon Linux) through the bastion:
+
+    $ ssh -J ec2-user@<bastion_public_ip> ec2-user@<webserver_private_ip>
+
+Try connecting directly to the webserver without the bastion — it will be refused by the security group.
+
+## Clean up
+
+Destroy in reverse order:
+
+    $ cd envs/dev/04-webserver
+    $ make destroy
+    $ cd ../03-database
+    $ make destroy
+    $ cd ../02-bastion
+    $ make destroy
+    $ cd ../01-network
+    $ make destroy
 
 ## Summary
 
-We have seen how to improve the security of our infrastructure by using a
-bastion for connecting to the servers.<br />
-In the next tutorial you will learn how to use the high availability feature
-provided by AWS.
+In this tutorial, we added a bastion host as the single SSH entry point to our infrastructure. The webserver no longer accepts SSH from the internet — only from the bastion's security group. We also separated each service into its own subnet for better isolation.
+
+The security model is now layered: your IP can SSH into the bastion, the bastion can SSH into everything else, the webserver can talk to Redis, and the database can only reach the internet outbound through the NAT Gateway. Each of these rules is enforced by security groups that reference other security groups, not CIDR blocks — so the rules follow the instances even if their IPs change.
+
+In the next tutorial, you will learn how to use the high availability features provided by AWS.
