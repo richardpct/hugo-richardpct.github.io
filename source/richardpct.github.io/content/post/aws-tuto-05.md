@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Adding a Bastion Host for Secure SSH Access"
-date: 2026-03-25
+date: 2021-03-27
 toc: true
 tags:
 - aws
