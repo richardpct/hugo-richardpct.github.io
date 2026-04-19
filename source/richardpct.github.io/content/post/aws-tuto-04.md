@@ -35,8 +35,9 @@ graph TB
     You[Your IP]
 
     subgraph VPC[VPC 10.0.0.0/16]
+        IGW[Internet Gateway]
+
         subgraph Public[Public Subnet - 10.0.0.0/24]
-            IGW[Internet Gateway]
             NAT[NAT Gateway + EIP]
             WEB["Webserver EC2<br/>Amazon Linux<br/>Python HTTP :8000"]
             WEBEIP[Elastic IP]
