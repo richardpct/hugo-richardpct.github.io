@@ -15,7 +15,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](/post/2026/03/26/aws-with-opentofu-high-availability-with-auto-scaling-groups/), we made our infrastructure self-healing with Auto Scaling Groups. If the webserver crashed, the ASG replaced it — but there was still a brief downtime while the new instance booted. In production, even a few minutes of downtime is unacceptable.
+In the [previous tutorial](https://richardpct.github.io/post/2021/04/05/aws-with-opentofu-high-availability-with-auto-scaling-groups/), we made our infrastructure self-healing with Auto Scaling Groups. If the webserver crashed, the ASG replaced it — but there was still a brief downtime while the new instance booted. In production, even a few minutes of downtime is unacceptable.
 
 In this tutorial, we solve this by adding an **Application Load Balancer** (ALB) in front of **two webservers**. The ALB distributes requests between them, and if one webserver fails, the other keeps serving traffic immediately — zero downtime. The ASG then replaces the failed instance in the background.
 
