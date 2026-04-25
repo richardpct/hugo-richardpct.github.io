@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Load Balancing with ALB for Zero Downtime"
-date: 2026-03-27
+date: 2021-04-17
 toc: true
 tags:
 - aws
