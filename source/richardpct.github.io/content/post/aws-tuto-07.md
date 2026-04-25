@@ -1,200 +1,164 @@
 ---
-title: "AWS with Terraform tutorial 07"
-date: 2021-04-17T18:17:44Z
-draft: false
+title: "AWS with OpenTofu: Load Balancing with ALB for Zero Downtime"
+date: 2026-03-27
+toc: true
+tags:
+- aws
+- opentofu
+- terraform
+- alb
+- load-balancer
+- high-availability
+categories:
+- tutorial
 ---
 
 ## Purpose
 
-This tutorial takes up the previous one
-[aws-terraform-tuto06](https://richardpct.github.io/post/2021/04/05/aws-with-terraform-tutorial-06/)
-by adding an ALB (Application Load Balancer) in front of the 2 web servers for
-sharing the load between 2 web servers and having a short downtime when a web
-server is failing.
+In the [previous tutorial](/post/2026/03/26/aws-with-opentofu-high-availability-with-auto-scaling-groups/), we made our infrastructure self-healing with Auto Scaling Groups. If the webserver crashed, the ASG replaced it — but there was still a brief downtime while the new instance booted. In production, even a few minutes of downtime is unacceptable.
 
-The following figure depicts the infrastructure you will build:
+In this tutorial, we solve this by adding an **Application Load Balancer** (ALB) in front of **two webservers**. The ALB distributes requests between them, and if one webserver fails, the other keeps serving traffic immediately — zero downtime. The ASG then replaces the failed instance in the background.
 
-<div style="text-align: center;">
-  <img src="https://raw.githubusercontent.com/richardpct/images/master/aws-tuto-07/image01.png">
-</div>
+We also make an important architectural change: the **webservers move from the public subnet to the private subnet**. Since users now access the application through the ALB (which lives in the public subnet), the webservers no longer need to be directly exposed to the internet.
 
-The source code can be found [here](https://github.com/richardpct/aws-terraform-tuto07).
+The full source code is available on my [GitHub repository](https://github.com/richardpct/aws-terraform-tuto07).
 
-## Configuring the network
+## Architecture overview
 
-#### environments/dev/00-base/main.tf
+```mermaid
+graph TB
+    Internet((Internet))
+    You[Your IP]
 
-The following code shows how the subnets are configured:
+    subgraph VPC[VPC 10.0.0.0/16]
+        IGW[Internet Gateway]
 
+        subgraph LBSubs["Public Subnets ALB - 3 AZs"]
+            LBCIDRs["10.0.11.0/24 | 10.0.12.0/24 | 10.0.13.0/24"]
+            ALB["Application Load Balancer :80"]
+        end
+
+        subgraph NATSubs["Public Subnets NAT - 3 AZs"]
+            NATCIDRs["10.0.21.0/24 | 10.0.22.0/24 | 10.0.23.0/24"]
+            NAT["3x NAT Gateways"]
+        end
+
+        subgraph BastionSubs["Public Subnets Bastion - 3 AZs"]
+            BastionCIDRs["10.0.31.0/24 | 10.0.32.0/24 | 10.0.33.0/24"]
+            BASTION["ASG min:1 max:1 --> Bastion EC2"]
+        end
+
+        subgraph WebSubs["Private Subnets Web - 3 AZs"]
+            WebCIDRs["10.0.41.0/24 | 10.0.42.0/24 | 10.0.43.0/24"]
+            ASGWEB["ASG min:2 max:2 --> 2x Webserver EC2 :8000"]
+        end
+
+        subgraph RedisSubs["Private Subnets Redis - 3 AZs"]
+            RedisCIDRs["10.0.51.0/24 | 10.0.52.0/24 | 10.0.53.0/24"]
+            REDIS["ElastiCache Redis :6379"]
+        end
+    end
+
+    Internet -- "HTTP :80" --> IGW
+    IGW -- "HTTP :80" --> ALB
+    ALB -- "HTTP :8000" --> ASGWEB
+    You -- "SSH :22" --> IGW
+    IGW -- "SSH :22" --> BASTION
+    BASTION -. "SSH :22" .-> ASGWEB
+    ASGWEB -- "Redis :6379" --> REDIS
+    ASGWEB -- "HTTP/S outbound" --> NAT
+    NAT --> IGW
+
+    style LBCIDRs fill:#ffd,stroke:#cc0,color:#333
+    style NATCIDRs fill:#ffd,stroke:#cc0,color:#333
+    style BastionCIDRs fill:#ffd,stroke:#cc0,color:#333
+    style WebCIDRs fill:#ffd,stroke:#cc0,color:#333
+    style RedisCIDRs fill:#ffd,stroke:#cc0,color:#333
 ```
-module "base" {
-  source = "../../../modules/base"
 
-  region                  = "eu-west-3"
-  env                     = "dev"
-  vpc_cidr_block          = "10.0.0.0/16"
-  subnet_public_lb_a      = "10.0.0.0/24"
-  subnet_public_lb_b      = "10.0.1.0/24"
-  subnet_public_nat_a     = "10.0.2.0/24"
-  subnet_public_nat_b     = "10.0.3.0/24"
-  subnet_public_bastion_a = "10.0.4.0/24"
-  subnet_public_bastion_b = "10.0.5.0/24"
-  subnet_private_web_a    = "10.0.6.0/24"
-  subnet_private_web_b    = "10.0.7.0/24"
-  subnet_private_redis_a  = "10.0.8.0/24"
-  subnet_private_redis_b  = "10.0.9.0/24"
-  cidr_allowed_ssh        = var.my_ip_address
-  ssh_public_key          = var.ssh_public_key
-}
-```
+## What changed from tutorial 06
 
-As you can see each service is held into 2 subnets, the first is located in the
-Availability Zone A and the second in Availability Zone B.<br />
-The load balancer, the Nat gateway and the bastion run in the public subnet
-whereas the web server, redis server run in the private subnet.
+### Webservers moved to private subnets
 
-#### modules/base/network.tf
+In the previous tutorial, the webservers were in public subnets and each had its own Elastic IP. Now that the ALB handles all inbound traffic, the webservers don't need public IPs anymore. They are moved to private subnets where they are unreachable from the internet — only the ALB can forward requests to them.
 
-We create a Nat Gateway in each Availability Zone, the private services located
-in the AZ-A will use the Nat Gateway in AZ-A, likewise the private services
-located in the AZ-B will use the Nat Gateway in AZ-B, thus if a AZ is
-unavailable the service still works:
+This is a significant security improvement. The webservers can still reach the internet for package updates via the NAT Gateway, but no one from outside can connect to them directly.
 
-```
-resource "aws_eip" "nat_a" {
-  vpc = true
+### One NAT Gateway per Availability Zone
+
+Instead of a single NAT Gateway, we now create one per AZ:
+
+```hcl
+resource "aws_nat_gateway" "nat_gw" {
+  count         = length(var.subnet_public_nat)
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public_nat[count.index].id
 
   tags = {
-    Name = "eip_nat_a-${var.env}"
-  }
-}
-
-resource "aws_eip" "nat_b" {
-  vpc = true
-
-  tags = {
-    Name = "eip_nat_b-${var.env}"
-  }
-}
-
-resource "aws_nat_gateway" "nat_gw_a" {
-  allocation_id = aws_eip.nat_a.id
-  subnet_id     = aws_subnet.public_nat_a.id
-
-  tags = {
-    Name = "nat_gw_a-${var.env}"
-  }
-}
-
-resource "aws_nat_gateway" "nat_gw_b" {
-  allocation_id = aws_eip.nat_b.id
-  subnet_id     = aws_subnet.public_nat_b.id
-
-  tags = {
-    Name = "nat_gw_b-${var.env}"
+    Name = "nat_gw-${var.env}-${count.index}"
   }
 }
 ```
 
-I remind you that the public subnets use a default route to the Internet
-Gateway whereas the private subnet use a default route to the Nat Gateway:
+Each private subnet's route table points to the NAT Gateway in its own AZ. This way, if AZ-A goes down, the private instances in AZ-B and AZ-C are not affected — they use their own NAT Gateways. Each NAT route table is associated with the private web subnet in the same AZ:
 
-```
-resource "aws_route_table_association" "public_lb_a" {
-  subnet_id      = aws_subnet.public_lb_a.id
-  route_table_id = aws_route_table.route.id
-}
+```hcl
+resource "aws_route_table" "route_nat" {
+  count  = length(var.subnet_public_nat)
+  vpc_id = aws_vpc.my_vpc.id
 
-resource "aws_route_table_association" "public_lb_b" {
-  subnet_id      = aws_subnet.public_lb_b.id
-  route_table_id = aws_route_table.route.id
-}
-
-resource "aws_route_table_association" "public_nat_a" {
-  subnet_id      = aws_subnet.public_nat_a.id
-  route_table_id = aws_route_table.route.id
-}
-
-resource "aws_route_table_association" "public_nat_b" {
-  subnet_id      = aws_subnet.public_nat_b.id
-  route_table_id = aws_route_table.route.id
-}
-
-resource "aws_route_table_association" "public_bastion_a" {
-  subnet_id      = aws_subnet.public_bastion_a.id
-  route_table_id = aws_route_table.route.id
-}
-
-resource "aws_route_table_association" "public_bastion_b" {
-  subnet_id      = aws_subnet.public_bastion_b.id
-  route_table_id = aws_route_table.route.id
-}
-
-resource "aws_route_table_association" "private_web_a" {
-  subnet_id      = aws_subnet.private_web_a.id
-  route_table_id = aws_route_table.route_nat_a.id
-}
-
-resource "aws_route_table_association" "private_web_b" {
-  subnet_id      = aws_subnet.private_web_b.id
-  route_table_id = aws_route_table.route_nat_b.id
-}
-```
-
-Except the Nat Gateway, only the bastion requires an Elastic IP, the web
-servers don't need it anymore because a public IP will automatically assign to
-the Load Balancer:
-
-```
-resource "aws_eip" "nat_a" {
-  vpc = true
-
-  tags = {
-    Name = "eip_nat_a-${var.env}"
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.nat_gw[count.index].id
   }
 }
 
-resource "aws_eip" "nat_b" {
-  vpc = true
-
-  tags = {
-    Name = "eip_nat_b-${var.env}"
-  }
-}
-
-resource "aws_eip" "bastion" {
-  vpc = true
-
-  tags = {
-    Name = "eip_bastion-${var.env}"
-  }
+resource "aws_route_table_association" "private_web" {
+  count          = length(var.subnet_private_web)
+  subnet_id      = aws_subnet.private_web[count.index].id
+  route_table_id = aws_route_table.route_nat[count.index].id
 }
 ```
 
-## Creating the Load Balancer
+The `count.index` ensures AZ-0's web subnet routes through NAT-0, AZ-1's web subnet through NAT-1, and so on.
 
-#### modules/base/alb.tf
+### Five subnet groups
 
-We create our Application Load Balancer assigned in 2 public subnets:
+The network now has 5 groups of subnets, each spanning 3 AZs — for a total of 15 subnets:
 
-```
+| Subnet group | Type | CIDR blocks | Purpose |
+|---|---|---|---|
+| ALB | Public | 10.0.11-13.0/24 | Load Balancer endpoints |
+| NAT | Public | 10.0.21-23.0/24 | NAT Gateways (one per AZ) |
+| Bastion | Public | 10.0.31-33.0/24 | SSH jump server |
+| Web | Private | 10.0.41-43.0/24 | Webserver instances |
+| Redis | Private | 10.0.51-53.0/24 | ElastiCache Redis |
+
+Public subnets route through the Internet Gateway. Private subnets route through the NAT Gateway in their respective AZ.
+
+## The Application Load Balancer
+
+The ALB is the central piece of this tutorial. It is defined in `modules/network/alb.tf` and consists of three resources.
+
+### The load balancer itself
+
+```hcl
 resource "aws_lb" "web" {
   name               = "alb-web-${var.env}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_web.id]
-  subnets            = [aws_subnet.public_lb_a.id, aws_subnet.public_lb_b.id]
+  subnets            = aws_subnet.public_lb[*].id
 }
 ```
 
-We state the behavior of our Load Balancer, it forwards the requests to port
-8000 of the web servers and check the health of our service by using the page
-located at /cgi-bin/ping.py (you will see later how this script is created),
-and the Load Balancer receives the requests in port 80:
+Setting `internal = false` makes it internet-facing. It is deployed across all 3 ALB public subnets and protected by its own security group.
 
-```
+### The target group
+
+```hcl
 resource "aws_lb_target_group" "web" {
-  port     = 8000
+  port     = local.web_port
   protocol = "HTTP"
   vpc_id   = aws_vpc.my_vpc.id
 
@@ -206,7 +170,13 @@ resource "aws_lb_target_group" "web" {
     path                = "/cgi-bin/ping.py"
   }
 }
+```
 
+The target group defines where the ALB forwards traffic (port 8000) and how it checks if the webservers are healthy. The ALB calls `/cgi-bin/ping.py` on each instance every 30 seconds. If an instance fails 2 consecutive checks (`unhealthy_threshold = 2`), the ALB stops sending it traffic. When the ASG launches a replacement and it passes 2 consecutive checks (`healthy_threshold = 2`), the ALB starts routing to it again.
+
+### The listener
+
+```hcl
 resource "aws_lb_listener" "web" {
   load_balancer_arn = aws_lb.web.arn
   port              = 80
@@ -219,91 +189,85 @@ resource "aws_lb_listener" "web" {
 }
 ```
 
-## Configuring the Web Servers
+The listener accepts HTTP traffic on port 80 and forwards it to the target group. The flow is:
 
-#### modules/webserver/main.tf
-
-We create an autoscaling group associated with our Load Balancer to ensure that
-we have 2 servers up and running, if a server is failing for any reasons, it
-will stop receiving the requests, afterwards it will be replaced by a new one:
-
+```mermaid
+graph LR
+    User[User :80] --> ALB[ALB Listener :80]
+    ALB --> TG[Target Group :8000]
+    TG --> WEB1[Web Server 1 :8000]
+    TG --> WEB2[Web Server 2 :8000]
+    TG -. "Health check every 30s" .-> PING["/cgi-bin/ping.py"]
 ```
+
+### ALB security group
+
+The ALB has its own security group that only allows HTTP inbound from anywhere and only forwards to the webserver security group:
+
+```hcl
+resource "aws_security_group_rule" "alb_web_from_any_http" {
+  type              = "ingress"
+  from_port         = local.http_port
+  to_port           = local.http_port
+  protocol          = "tcp"
+  cidr_blocks       = local.anywhere
+  security_group_id = aws_security_group.alb_web.id
+}
+
+resource "aws_security_group_rule" "alb_web_to_web_http" {
+  type                     = "egress"
+  from_port                = local.web_port
+  to_port                  = local.web_port
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.web.id
+  security_group_id        = aws_security_group.alb_web.id
+}
+```
+
+The webserver security group mirrors this — it accepts HTTP on port 8000 only from the ALB security group:
+
+```hcl
+resource "aws_security_group_rule" "web_from_alb_web_http" {
+  type                     = "ingress"
+  from_port                = local.web_port
+  to_port                  = local.web_port
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.alb_web.id
+  security_group_id        = aws_security_group.web.id
+}
+```
+
+## The webserver ASG
+
+The webserver ASG now maintains **2 instances** instead of 1, and is attached to the ALB target group:
+
+```hcl
 resource "aws_autoscaling_group" "web" {
-  name                 = "asg_web-${var.env}"
-  launch_configuration = aws_launch_configuration.web.id
-  vpc_zone_identifier  = [data.terraform_remote_state.base.outputs.subnet_private_web_a_id, data.terraform_remote_state.base.outputs.subnet_private_web_b_id]
-  target_group_arns    = [data.terraform_remote_state.base.outputs.alb_target_group_web_arn]
-  health_check_type    = "ELB"
+  name                = "asg_web-${var.env}"
+  vpc_zone_identifier = data.terraform_remote_state.network.outputs.subnet_private_web_id[*]
+  target_group_arns   = [data.terraform_remote_state.network.outputs.alb_target_group_web_arn]
+  health_check_type   = "ELB"
+  min_size            = 2
+  max_size            = 2
 
-  min_size             = 2
-  max_size             = 2
-
-  tag {
-    key                 = "Name"
-    value               = "webserver-${var.env}"
-    propagate_at_launch = true
+  launch_template {
+    id = aws_launch_template.web.id
   }
 }
 ```
 
-#### modules/webserver/user-data.sh
+Two important changes compared to tutorial 06:
 
-I added a page located at /cgi-bin/ping.py for checking the health of the web
-servers, in addition I display the instance Id:
+* **`target_group_arns`** — links the ASG to the ALB target group, so new instances are automatically registered with the load balancer
+* **`health_check_type = "ELB"`** — the ASG uses the ALB's health checks (the `/cgi-bin/ping.py` endpoint) instead of basic EC2 status checks. This means if the web application crashes but the instance is still running, the ALB detects it and the ASG replaces the instance
 
-```
-#!/bin/bash
+Since the webservers are now in private subnets, the launch template sets `associate_public_ip_address = false` — no public IP is needed.
 
-set -x
+## The health check endpoint
 
-exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
-sudo yum -y update
-sudo yum -y upgrade
-sudo yum -y install python38
-sudo pip-3.8 install redis
-sudo useradd www -s /sbin/nologin
-mkdir -p /var/lib/www/cgi-bin
-INSTANCE_ID="$(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
+The user-data script creates a simple `/cgi-bin/ping.py` page that returns "ok":
 
-cat << EOF > /var/lib/www/cgi-bin/hello.py
-#!/usr/bin/env python3
-
-import redis
-
-r = redis.Redis(
-                host='${database_host}',
-                port=6379)
-r.set('count', 0)
-count = r.incr(1)
-
-print("Content-type: text/html")
-print("")
-print("<html><body>")
-print("<p>Hello World!<br />counter: " + str(count) + "<br />env: ${environment}</p>")
-print("Id: $INSTANCE_ID")
-print("</body></html>")
-EOF
-
-cat << EOF > /var/lib/www/cgi-bin/ping.py
-#!/usr/bin/env python
-
-import redis
-
-r = redis.Redis(
-                host='${database_host}',
-                port=6379)
-r.set('count', 0)
-count = r.incr(1)
-
-print("Content-type: text/html")
-print("")
-print("<html><body>")
-print("<p>Hello World!<br />counter: " + str(count) + "<br />env: ${environment}</p>")
-print("Id: $INSTANCE_ID")
-print("</body></html>")
-EOF
-
-cat << EOF > /var/lib/www/cgi-bin/ping.py
+```python
 #!/usr/bin/env python3
 
 print("Content-type: text/html")
@@ -311,127 +275,126 @@ print("")
 print("<html><body>")
 print("<p>ok</p>")
 print("</body></html>")
-EOF
-
-chmod 755 /var/lib/www/cgi-bin/hello.py
-chmod 755 /var/lib/www/cgi-bin/ping.py
-cd /var/lib/www
-sudo -u www python3 -m http.server 8000 --cgi
 ```
 
-## Deploying the infrastructure
+This is separate from `hello.py` because the health check should be lightweight — it doesn't need to connect to Redis. The ALB calls this endpoint every 30 seconds on each instance to verify the webserver process is running.
 
-Export the following environment variables:
+The `hello.py` page now also displays the **instance ID**, so you can see which server is responding:
 
-    $ export TF_VAR_region="eu-west-3"
-    $ export TF_VAR_bucket="yourbucket-terraform-state"
-    $ export TF_VAR_dev_base_key="terraform/dev/base/terraform.tfstate"
-    $ export TF_VAR_dev_bastion_key="terraform/dev/bastion/terraform.tfstate"
-    $ export TF_VAR_dev_database_key="terraform/dev/database/terraform.tfstate"
-    $ export TF_VAR_dev_webserver_key="terraform/dev/webserver/terraform.tfstate"
-    $ export TF_VAR_ssh_public_key="ssh-rsa XXX..."
-    $ export TF_VAR_my_ip_address=$(curl -s 'https://duckduckgo.com/?q=ip&t=h_&ia=answer' \
-    | sed -e 's/.*Your IP address is \([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\) in.*/\1/')
+```python
+print("Id: $INSTANCE_ID")
+```
 
-Building:
+When you curl the ALB multiple times, you'll see the instance ID alternating between the two servers — proving the load balancer is distributing requests.
 
-    $ cd environments/dev
-    $ cd 00-network
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_network_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
-    $ cd ../01-bastion
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_bastion_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
-    $ cd ../02-database
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_database_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
-    $ cd ../03-webserver
-    $ terraform init \
-        -backend-config="bucket=${TF_VAR_bucket}" \
-        -backend-config="key=${TF_VAR_dev_webserver_key}" \
-        -backend-config="region=${TF_VAR_region}"
-    $ terraform apply
+## Project structure
 
-You need to perform `terraform init` once.
+```
+aws-terraform-tuto07/
+├── modules/
+│   ├── network/
+│   │   ├── main.tf           # VPC, 15 subnets, IGW, 3 NAT GWs, routes
+│   │   ├── sg.tf             # Security groups for bastion, ALB, web, database
+│   │   ├── alb.tf            # Application Load Balancer, target group, listener
+│   │   ├── iam.tf            # IAM role for EIP association
+│   │   ├── outputs.tf
+│   │   ├── providers.tf
+│   │   └── variables.tf
+│   ├── bastion/              # ASG min:1 max:1, EIP re-association
+│   ├── database/             # ElastiCache Redis
+│   └── web/                  # ASG min:2 max:2, attached to ALB target group
+└── envs/
+    └── dev/
+        ├── 01-network/
+        ├── 02-bastion/
+        ├── 03-database/
+        └── 04-web/
+```
 
-## Testing your infrastructure
+The network module now includes `alb.tf` for the load balancer configuration.
 
-When your infrastructure is built, get the DNS name of your Load Balancer by
-performing the following command:
+## Deploy the infrastructure
 
-    $ aws elbv2 describe-load-balancers --names alb-web-dev \
+### Prepare your variables
+
+Create a file at `~/terraform/aws-terraform-tuto07/terraform_vars_dev_secrets`:
+
+```bash
+export TF_VAR_aws_profile="dev"
+export TF_VAR_region="eu-west-3"
+export TF_VAR_bucket="XXXX-tofu-state"
+export TF_VAR_key_network="tuto-07/dev/network/terraform.tfstate"
+export TF_VAR_key_bastion="tuto-07/dev/bastion/terraform.tfstate"
+export TF_VAR_key_database="tuto-07/dev/database/terraform.tfstate"
+export TF_VAR_key_web="tuto-07/dev/web/terraform.tfstate"
+export TF_VAR_ssh_public_key="ssh-ed25519 XXXX"
+MY_IP=$(curl -s ifconfig.co/)
+export TF_VAR_my_ip_address="$MY_IP/32"
+```
+
+### Build
+
+Deploy the four stacks in order:
+
+    $ cd envs/dev/01-network
+    $ make apply
+    $ cd ../02-bastion
+    $ make apply
+    $ cd ../03-database
+    $ make apply
+    $ cd ../04-web
+    $ make apply
+
+### Test the application
+
+Get the DNS name of the ALB:
+
+    $ aws --profile dev elbv2 describe-load-balancers --names alb-web-dev \
         --query 'LoadBalancers[*].DNSName' \
         --output text
 
-Get the ARN of your Load Balancer:
+Test the application by issuing several requests:
 
-    $ aws elbv2 describe-load-balancers --names alb-web-dev \
-        --query 'LoadBalancers[*].LoadBalancerArn' \
-        --output text
+    $ curl http://<load_balancer_dns>/cgi-bin/hello.py
 
-Get the ARN of your Target Groups by providing the Load Balancer ARN:
+Each request increments the counter (stored in ElastiCache Redis). You should also notice the instance ID alternating between two values — that's the ALB distributing traffic across both webservers.
 
-    $ aws elbv2 describe-target-groups \
-        --load-balancer-arn arn:aws:elasticloadbalancing:eu-west-3:xxxxxxxxxxxx:loadbalancer/app/alb-web-dev/xxxxxxxxxxxxxxxx \
-        --query 'TargetGroups[*].TargetGroupArn' \
-        --output text
+## Test the high availability
 
-Perform the following command by providing the Target Group ARN until you have
-2 healthy instances:
+This is where the ALB shines. Let's kill one webserver and verify there is **zero downtime**.
 
-    $ aws elbv2 describe-target-health \
-        --target-group-arn arn:aws:elasticloadbalancing:eu-west-3:xxxxxxxxxxxx:targetgroup/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+First, connect to one of the webservers through the bastion and kill the Python process:
 
-Then issue the following command several times for increasing the counter:
+    $ ssh -J ec2-user@<bastion_eip> ec2-user@<web_private_ip>
+    $ sudo pkill python3
 
-    $ curl http://ARN_load_balancer:8000/cgi-bin/hello.py
+Now keep making requests:
 
-It should return the count of requests you have performed.
+    $ curl http://<load_balancer_dns>/cgi-bin/hello.py
 
-## Testing the High Availability
+The ALB detects the unhealthy instance after 2 failed health checks (about 60 seconds) and stops routing to it. During this time and after, you still get responses — from the remaining healthy server. You'll notice the instance ID no longer alternates; only the healthy server's ID appears.
 
-Chose one of the 2 running instances and connect to it, then kill the web
-service process:
+After a few minutes, the ASG launches a replacement instance. Once it boots, runs user-data, and passes 2 consecutive health checks, the ALB starts routing to it again. The instance ID will start alternating again, this time with the new instance's ID.
 
-    $ ssh -J ec2-user@IP_public_bastion ec2-user@IP_private_instance
-    $ sudo su -
-    # pkill python3
+The key difference from tutorial 06: at no point was the service unavailable. One server was always handling requests while the other was being replaced.
 
-Wait for a while, then the Load Balancer will deregister the unhealthy instance,
-you now have only one healthy instance:
+## Clean up
 
-    $ aws elbv2 describe-target-health \
-        --target-group-arn arn:aws:elasticloadbalancing:eu-west-3:xxxxxxxxxxxx:targetgroup/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Destroy in reverse order:
 
-If you make some requests to the service, you will notice it is still up and
-running because the Load Balancer have stopped to forward to the failed server,
-only the healthy server is used:
+    $ cd envs/dev/04-web
+    $ make destroy
+    $ cd ../03-database
+    $ make destroy
+    $ cd ../02-bastion
+    $ make destroy
+    $ cd ../01-network
+    $ make destroy
 
-    $ curl http://ARN_load_balancer:8000/cgi-bin/hello.py
+## Summary
 
-Wait for a while, then you will have 2 healthy instances because a new one has
-replaced the failed instance.
+In this tutorial, we added an Application Load Balancer to distribute traffic across two webservers, achieving zero-downtime failover. When one webserver fails, the ALB routes all traffic to the remaining healthy server while the ASG replaces the failed one in the background.
 
-## Destroying your infrastructure
+We also moved the webservers from public to private subnets — since users access the application through the ALB, the webservers no longer need to be directly exposed to the internet. And we deployed one NAT Gateway per Availability Zone to ensure private instances maintain internet access even if an AZ fails.
 
-After finishing your test, destroy your infrastructure:
-
-    $ cd environments/dev
-    $ cd 03-webserver
-    $ terraform destroy
-    $ cd ../02-database
-    $ terraform destroy
-    $ cd ../01-bastion
-    $ terraform destroy
-    $ cd ../00-network
-    $ terraform destroy
-
+In the next tutorial, I will show you how to auto-scale your infrastructure when the servers are overloaded — dynamically adding or removing webservers based on CPU utilization.
