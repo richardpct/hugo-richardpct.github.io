@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Adding a Bastion Host for Secure SSH Access"
-date: 2021-03-27
+date: 2024-03-27
 toc: true
 tags:
 - aws
@@ -14,7 +14,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](https://richardpct.github.io/post/2021/03/16/aws-with-opentofu-public-and-private-subnets-with-a-database/), we isolated our Redis database in a private subnet. But there was a security gap: the webserver still accepted SSH connections directly from the internet (restricted to your IP, but still exposed). If the webserver is compromised via SSH, an attacker has a direct foothold in your VPC.
+In the [previous tutorial](https://richardpct.github.io/post/2024/03/16/aws-with-opentofu-public-and-private-subnets-with-a-database/), we isolated our Redis database in a private subnet. But there was a security gap: the webserver still accepted SSH connections directly from the internet (restricted to your IP, but still exposed). If the webserver is compromised via SSH, an attacker has a direct foothold in your VPC.
 
 In this tutorial, we add a **bastion host** (also called a jump server) to solve this problem. The bastion is the only instance that accepts SSH from the internet. To reach the webserver or the database via SSH, you must first jump through the bastion. This is a standard security pattern in production infrastructure.
 

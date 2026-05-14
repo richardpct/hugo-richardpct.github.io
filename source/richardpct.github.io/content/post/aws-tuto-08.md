@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Auto Scaling Based on CPU Utilization"
-date: 2021-04-23
+date: 2024-04-23
 toc: true
 tags:
 - aws
@@ -14,7 +14,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](/post/2026/03/27/aws-with-opentofu-load-balancing-with-alb-for-zero-downtime/), we deployed two webservers behind an Application Load Balancer for zero-downtime failover. The ASG maintained exactly 2 instances at all times — no more, no less. But what happens when traffic spikes and your two servers can't keep up?
+In the [previous tutorial](/post/2024/04/17/aws-with-opentofu-load-balancing-with-alb-for-zero-downtime/), we deployed two webservers behind an Application Load Balancer for zero-downtime failover. The ASG maintained exactly 2 instances at all times — no more, no less. But what happens when traffic spikes and your two servers can't keep up?
 
 In this tutorial, we add an **auto scaling policy** so that the ASG can dynamically scale out from 2 to 3 webservers when the average CPU utilization crosses a threshold, and scale back in when the load drops. This is the difference between a fixed fleet and an elastic one — AWS automatically adjusts capacity to match demand.
 

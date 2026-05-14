@@ -16,7 +16,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorials](https://richardpct.github.io/post/2021/06/03/aws-with-opentofu-deploying-a-production-gitlab-instance/), we built increasingly sophisticated AWS infrastructure. In this tutorial, we bring it all together to deploy a **vanilla Kubernetes cluster** using `kubeadm` on AWS.
+In the [previous tutorials](https://richardpct.github.io/post/2024/06/03/aws-with-opentofu-deploying-a-production-gitlab-instance/), we built increasingly sophisticated AWS infrastructure. In this tutorial, we bring it all together to deploy a **vanilla Kubernetes cluster** using `kubeadm` on AWS.
 
 This is intended as a learning exercise to show you how to build a complex architecture on AWS — in production, you would prefer using EKS (the managed Kubernetes service). But understanding what happens under the hood gives you the skills to troubleshoot and customize any Kubernetes setup.
 

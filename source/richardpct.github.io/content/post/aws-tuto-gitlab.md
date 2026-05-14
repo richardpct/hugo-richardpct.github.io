@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Deploying a Production GitLab Instance"
-date: 2021-06-03
+date: 2024-06-03
 toc: true
 tags:
 - aws
@@ -14,7 +14,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorials](https://richardpct.github.io/post/2021/04/23/aws-with-opentofu-auto-scaling-based-on-cpu-utilization/), we progressively built up an AWS infrastructure from a single EC2 instance to an auto-scaling fleet behind a load balancer. In this tutorial, we apply everything we have learned to deploy a real-world application: **GitLab**.
+In the [previous tutorials](https://richardpct.github.io/post/2024/04/23/aws-with-opentofu-auto-scaling-based-on-cpu-utilization/), we progressively built up an AWS infrastructure from a single EC2 instance to an auto-scaling fleet behind a load balancer. In this tutorial, we apply everything we have learned to deploy a real-world application: **GitLab**.
 
 GitLab is one of the most widely used Git repository managers in the world, and it includes a built-in CI/CD pipeline engine called **Runners**. For building this infrastructure, I followed the [official GitLab installation guide for AWS](https://docs.gitlab.com/ee/install/aws/), with one simplification: instead of using a separate Gitaly service for Git repository storage, I use a shared NFS filesystem via AWS EFS. This keeps the architecture simpler while still supporting multiple GitLab instances.
 

@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: High Availability with Auto Scaling Groups"
-date: 2021-04-05
+date: 2024-04-05
 toc: true
 tags:
 - aws
@@ -15,7 +15,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](https://richardpct.github.io/post/2021/03/27/aws-with-opentofu-adding-a-bastion-host-for-secure-ssh-access/), we secured our infrastructure with a bastion host. But there was still a weakness: if the bastion or the webserver crashed, they stayed down until someone manually intervened. In production, that's not acceptable.
+In the [previous tutorial](https://richardpct.github.io/post/2024/03/27/aws-with-opentofu-adding-a-bastion-host-for-secure-ssh-access/), we secured our infrastructure with a bastion host. But there was still a weakness: if the bastion or the webserver crashed, they stayed down until someone manually intervened. In production, that's not acceptable.
 
 In this tutorial, we introduce **Auto Scaling Groups** (ASG) to make the bastion and webserver self-healing. If an instance fails or is terminated for any reason, the ASG automatically launches a replacement — your service experiences only a brief downtime rather than a full outage.
 

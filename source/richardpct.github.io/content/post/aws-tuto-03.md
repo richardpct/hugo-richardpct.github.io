@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Multi-Environment Deployments with Modules"
-date: 2021-03-06
+date: 2024-03-06
 toc: true
 tags:
 - aws
@@ -13,7 +13,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](https://richardpct.github.io/post/2021/03/04/aws-with-opentofu-refactoring-with-modules/), we refactored our infrastructure code into reusable modules. In this tutorial, we put those modules to real use by deploying the same infrastructure across **multiple environments** — Dev and Staging — each running in its own AWS account with its own network configuration.
+In the [previous tutorial](https://richardpct.github.io/post/2024/03/04/aws-with-opentofu-refactoring-with-modules/), we refactored our infrastructure code into reusable modules. In this tutorial, we put those modules to real use by deploying the same infrastructure across **multiple environments** — Dev and Staging — each running in its own AWS account with its own network configuration.
 
 Along the way, we introduce four practical improvements over the previous tutorials:
 

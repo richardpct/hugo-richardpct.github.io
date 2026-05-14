@@ -1,6 +1,6 @@
 ---
 title: "Getting Started with AWS and OpenTofu"
-date: 2021-02-20
+date: 2024-02-20
 toc: true
 tags:
 - aws

@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Public and Private Subnets with a Database"
-date: 2021-03-16
+date: 2024-03-16
 toc: true
 tags:
 - aws
@@ -14,7 +14,7 @@ categories:
 
 ## Purpose
 
-In the [previous tutorial](/post/2021/03/06/aws-with-opentofu-multi-environment-deployments-with-modules/), we deployed our infrastructure across multiple environments using modules. In this tutorial, we introduce a much more realistic network topology: a **public subnet** and a **private subnet** within the same VPC.
+In the [previous tutorial](/post/2024/03/06/aws-with-opentofu-multi-environment-deployments-with-modules/), we deployed our infrastructure across multiple environments using modules. In this tutorial, we introduce a much more realistic network topology: a **public subnet** and a **private subnet** within the same VPC.
 
 The scenario is based on the AWS reference architecture [VPC with Public and Private Subnets (NAT)](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Scenario2.html?shortFooter=true). You will build:
 

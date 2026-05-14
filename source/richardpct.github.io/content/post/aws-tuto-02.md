@@ -1,6 +1,6 @@
 ---
 title: "AWS with OpenTofu: Refactoring with Modules"
-date: 2021-03-04
+date: 2024-03-04
 toc: true
 tags:
 - aws
@@ -13,7 +13,7 @@ categories:
 
 ## Purpose
 
-This tutorial builds on [the previous one](https://richardpct.github.io/post/2021/02/20/getting-started-with-aws-and-opentofu/) where we deployed a web server on AWS using OpenTofu. The infrastructure we built works, but all the resource definitions live directly in the stack directories. If we wanted to create a second environment (staging, production), we would have to copy-paste all that code — and as any developer knows, that's a recipe for bugs and drift.
+This tutorial builds on [the previous one](https://richardpct.github.io/post/2024/02/20/getting-started-with-aws-and-opentofu/) where we deployed a web server on AWS using OpenTofu. The infrastructure we built works, but all the resource definitions live directly in the stack directories. If we wanted to create a second environment (staging, production), we would have to copy-paste all that code — and as any developer knows, that's a recipe for bugs and drift.
 
 In this tutorial, we refactor the code by introducing **modules**. A module in OpenTofu works like a function in a programming language: it encapsulates a reusable piece of infrastructure and accepts parameters. You write it once, and call it as many times as you need with different values.
 
@@ -25,7 +25,7 @@ The full source code is available on my [GitHub repository](https://github.com/r
 
 The AWS infrastructure we deploy is exactly the same — a VPC, a public subnet, an EC2 instance running Nginx, behind an Elastic IP. What changes is how the code is organized.
 
-In [tutorial 01](https://richardpct.github.io/post/2021/02/20/getting-started-with-aws-and-opentofu/), the resource definitions lived directly inside the `01-network/main.tf` and `02-webserver/main.tf` files. In this tutorial, those resources are extracted into reusable modules, and the stack files simply call the modules with parameters:
+In [tutorial 01](https://richardpct.github.io/post/2024/02/20/getting-started-with-aws-and-opentofu/), the resource definitions lived directly inside the `01-network/main.tf` and `02-webserver/main.tf` files. In this tutorial, those resources are extracted into reusable modules, and the stack files simply call the modules with parameters:
 
 ```mermaid
 graph LR
