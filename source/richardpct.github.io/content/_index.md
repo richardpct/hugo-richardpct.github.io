@@ -8,18 +8,18 @@ title: Home
 
 ### My personal blog
 
-Hello, World!
+My name is Richard and I’m based in Paris. As a DevOps/SRE/Infrastructure
+Engineer, I’ve gained extensive experience across various industries, working
+for major French corporations like Orange, SNCF, BNP Paribas, and La Poste, as
+well as high-growth scale-ups such as Dataiku and Ledger.
 
-My name is Richard and I live in Paris. I am a DevOps/SRE engineer and I have
-worked in many lines of business for some large French companies such as
-Telecom, rail transport, banking, and so on.<br/>
-I have decided to create this website to share with you my experience with
-automation and infrastructure like code, containers, cloud computing,
-programming and much more.
+I created this blog to share my journey with automation, Infrastructure as Code,
+virtualization, container orchestration, cloud computing, and more.
 
-The purpose of this blog is to keep track of what I have accomplished so far
-and to push myself to learn more. This blog provides mainly technical contents.
-<br/>
-I hope you enjoy my personal website!
+My goal is twofold: to document my technical accomplishments and to challenge
+myself to keep learning. You will mainly find technical deep-dives and tutorials
+here.
+
+I hope you find the content valuable and enjoy your visit!
 
 ### Articles
