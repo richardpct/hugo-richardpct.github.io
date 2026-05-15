@@ -1,5 +1,5 @@
 ---
-title: "Automating Kubernetes on Proxmox with Tofu"
+title: "Automating Kubernetes on Proxmox with OpenTofu"
 date: 2026-03-15T12:19:28+01:00
 draft: false
 ---
